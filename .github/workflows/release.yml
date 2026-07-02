@@ -21,8 +21,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
+
+      - name: Verify Node.js version
+        run: |
+          node -v
+          node -e "const major=+process.versions.node.split('.')[0]; if (major < 24) { console.error('Expected Node >=24'); process.exit(1); }"
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
