@@ -241,13 +241,21 @@ These are provided by the Pi host and should not be bundled:
 
 ## Releasing
 
-This repo uses [Changesets](https://github.com/changesets/changesets) for semver bumps and `CHANGELOG.md`.
+This repo uses [Changesets](https://github.com/changesets/changesets) for semver bumps and `CHANGELOG.md`, and a **tag-triggered** workflow for GitHub Releases (and optional npm publish).
 
 1. After a feature/fix PR, add a changeset: `pnpm changeset`
-2. Merge to `main` — GitHub Actions opens a **Version Packages** PR
-3. Merge that PR — CI publishes `@chendpoc/pi-memory` to npm and creates a GitHub Release
+2. Merge to `main` — GitHub Actions opens a **Version Packages** PR (bumps version + updates `CHANGELOG.md`)
+3. Merge that PR, then tag and push:
 
-Set `NPM_TOKEN` in the repo secrets (npm granular token with publish access to `@chendpoc`).
+```bash
+git pull origin main
+git tag v0.1.13
+git push origin v0.1.13
+```
+
+4. The **Tag Release** workflow runs on `v*` tags: creates a GitHub Release from `CHANGELOG.md`, then publishes to npm when `NPM_TOKEN` is configured.
+
+Set `NPM_TOKEN` in repo secrets (npm granular token with publish access to `@chendpoc`).
 
 ## Development
 

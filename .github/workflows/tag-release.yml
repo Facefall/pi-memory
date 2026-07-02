@@ -1,0 +1,71 @@
+name: Tag Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag v${TAG} does not match package.json version ${VERSION}"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          BODY=$(awk -v ver="$VERSION" '
+            $0 == "## " ver { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md)
+          if [ -z "$BODY" ]; then
+            BODY="Release v${VERSION}."
+          fi
+          {
+            echo "body<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: false
+
+      - name: Publish to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
