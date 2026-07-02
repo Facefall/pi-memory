@@ -26,6 +26,15 @@ export {
 } from "./config.js";
 
 export {
+  defaultMemoryConfigPath,
+  loadMemoryConfig,
+  loadMemorySettings,
+  resolveHelperModelSpec,
+  type LoadedMemorySettings,
+  type MemorySettingsFile,
+} from "./settings.js";
+
+export {
   defaultBundleRoot,
   defaultPiHome,
   defaultSessionsDir,

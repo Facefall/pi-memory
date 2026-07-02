@@ -4,7 +4,8 @@ import path from "node:path";
 
 import { createStandaloneLLMClient } from "./adapters/piComplete.js";
 import { installBundle } from "./bundle/install.js";
-import { defaultMemoryConfig } from "./config.js";
+import type { MemoryConfig } from "./config.js";
+import { loadMemoryConfig } from "./settings.js";
 import { openSessionIndex } from "./fallback/sessionIndex.js";
 import { SidecarClient } from "./sidecar/client.js";
 import { MemoryService } from "./service.js";
@@ -13,7 +14,7 @@ import { createLLMFactExtractor } from "./trainer/llmExtractor.js";
 import { createTrainScheduler } from "./trainer/scheduler.js";
 import type { QueryIntent } from "./types.js";
 
-async function tryReloadSidecar(cfg: ReturnType<typeof defaultMemoryConfig>): Promise<void> {
+async function tryReloadSidecar(cfg: MemoryConfig): Promise<void> {
   try {
     fs.accessSync(cfg.socketPath, fs.constants.F_OK);
   } catch {
@@ -34,7 +35,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const cfg = defaultMemoryConfig();
+  const cfg = loadMemoryConfig();
   const service = new MemoryService(cfg);
 
   if (cmd === "health") {

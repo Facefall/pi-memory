@@ -11,7 +11,11 @@ import {
   DEFAULT_HELPER_PROVIDER,
   resolveMemoryHelperLLM,
 } from "./adapters/piComplete.js";
-import { defaultMemoryConfig, type MemoryConfig } from "./config.js";
+import type { MemoryConfig } from "./config.js";
+import {
+  loadMemorySettings,
+  resolveHelperModelSpec,
+} from "./settings.js";
 import { createFallbackQuery } from "./fallback/index.js";
 import type { RerankOptions } from "./fallback/llmRerank.js";
 import type { MemoryHelperLLM } from "./preflight/detectIntents.js";
@@ -57,6 +61,7 @@ const RECALL_MAX_BYTES = 32_000;
 
 let sharedService: MemoryService | null = null;
 let sessionCfg: MemoryConfig | null = null;
+let settingsHelperModel: string | undefined;
 let sharedHelper: MemoryHelperLLM | null = null;
 let sharedLLMClient: LLMClient | null = null;
 let preflightCache: { userText: string; privateContext: string } | null = null;
@@ -65,9 +70,14 @@ export function getSharedMemoryService(): MemoryService | null {
   return sharedService;
 }
 
+function getHelperModelSpec(pi: ExtensionAPI): string | undefined {
+  return resolveHelperModelSpec(pi.getFlag("memory-helper-model"), settingsHelperModel);
+}
+
 async function refreshMemoryHelper(ctx: ExtensionContext, pi: ExtensionAPI): Promise<void> {
-  sharedHelper = await resolveMemoryHelperLLM(ctx, pi.getFlag("memory-helper-model"));
-  sharedLLMClient = createPiLLMClient(ctx, pi.getFlag("memory-helper-model"));
+  const helperModel = getHelperModelSpec(pi);
+  sharedHelper = await resolveMemoryHelperLLM(ctx, helperModel);
+  sharedLLMClient = createPiLLMClient(ctx, helperModel);
 }
 
 function getRerankOpts(): RerankOptions | null {
@@ -114,7 +124,9 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    const cfg = defaultMemoryConfig();
+    const loaded = loadMemorySettings();
+    const cfg = loaded.config;
+    settingsHelperModel = loaded.helperModel;
     sessionCfg = cfg;
     preflightCache = null;
     sharedHelper = null;
@@ -142,6 +154,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
       sharedService = null;
     }
     sessionCfg = null;
+    settingsHelperModel = undefined;
     sharedHelper = null;
     sharedLLMClient = null;
     preflightCache = null;
@@ -155,9 +168,12 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
     preflightCache = null;
   });
 
+  const initialSettings = loadMemorySettings();
+  settingsHelperModel = initialSettings.helperModel;
+
   const fallback = createFallbackQuery({
-    sessionsDir: defaultMemoryConfig().sessionsDir,
-    memoryMdPaths: defaultMemoryConfig().memoryMdPaths,
+    sessionsDir: initialSettings.config.sessionsDir,
+    memoryMdPaths: initialSettings.config.memoryMdPaths,
   });
 
   pi.registerCommand("memory", {
@@ -206,7 +222,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
     },
   });
 
-  const memoryMdPath = defaultMemoryConfig().memoryMdPaths[0];
+  const memoryMdPath = initialSettings.config.memoryMdPaths[0];
   if (memoryMdPath) {
     const appendTool = createMemoryAppendTool(memoryMdPath);
     pi.registerTool({
