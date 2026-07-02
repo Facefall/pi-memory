@@ -15,7 +15,7 @@ on:
         type: boolean
         default: true
       publish_npm:
-        description: "Publish to npm (requires NPM_TOKEN secret)"
+        description: "Publish to npm via OIDC trusted publishing"
         type: boolean
         default: true
 
@@ -98,11 +98,14 @@ jobs:
 
       - name: Publish to npm
         if: github.event_name == 'push' || inputs.publish_npm == true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "NPM_TOKEN not configured; skipping npm publish."
-            exit 0
-          fi
-          npm publish --access public --provenance
+          NPM_VERSION="$(npm -v)"
+          echo "npm ${NPM_VERSION}"
+          node -e "
+            const [a,b,c]=process.argv[1].split('.').map(Number);
+            if (a < 11 || (a === 11 && b < 5) || (a === 11 && b === 5 && c < 1)) {
+              console.error('npm >= 11.5.1 required for trusted publishing');
+              process.exit(1);
+            }
+          " "$NPM_VERSION"
+          npm publish --access public

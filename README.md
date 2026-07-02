@@ -253,15 +253,34 @@ git tag v0.1.13
 git push origin v0.1.13
 ```
 
-4. The **Tag Release** workflow runs on `v*` tags: creates a GitHub Release from `CHANGELOG.md`, then publishes to npm when `NPM_TOKEN` is configured.
+4. The **Tag Release** workflow (`tag-release.yml`) runs on `v*` tags: creates a GitHub Release from `CHANGELOG.md`, then publishes to npm via [OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers/) (no long-lived `NPM_TOKEN`).
+
+### npm trusted publishing (recommended)
+
+npm now recommends **Trusted Publishing** over Granular "bypass 2FA" tokens for CI. GitHub Actions proves its identity with a short-lived OIDC credential; no stored token, no OTP (`EOTP`).
+
+**One-time setup on npmjs.com** (package must exist first — see below):
+
+1. Open `https://www.npmjs.com/package/@chendpoc/pi-memory/access` (after first publish)
+2. **Trusted Publisher** → GitHub Actions
+3. Set exactly:
+   - Organization or user: `Facefall`
+   - Repository: `pi-memory`
+   - Workflow filename: `tag-release.yml`
+   - Environment: *(leave blank unless you add a GitHub Environment)*
+
+**First publish:** npm requires the package to exist before you can configure trusted publishing. Either:
+
+- Publish once locally with `npm login` + `npm publish --access public`, or
+- Use [setup-npm-trusted-publish](https://github.com/azu/setup-npm-trusted-publish) to create a placeholder, configure OIDC, then publish real versions from CI.
+
+The workflow already sets `id-token: write` and uses Node 24 (npm ≥ 11.5.1). Provenance is automatic with trusted publishing.
 
 **Re-run without deleting a tag:** GitHub → Actions → **Tag Release** → **Run workflow**
 
 - `tag`: `v0.1.13`
 - `skip_github_release`: ✅ (release already exists)
-- `publish_npm`: ✅ (requires `NPM_TOKEN`)
-
-Set `NPM_TOKEN` in repo secrets (npm granular token with publish access to `@chendpoc`).
+- `publish_npm`: ✅
 
 ## Development
 
