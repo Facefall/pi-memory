@@ -4,6 +4,20 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.13)"
+        required: true
+        default: "v0.1.13"
+      skip_github_release:
+        description: "Skip GitHub Release (enable when the release already exists)"
+        type: boolean
+        default: true
+      publish_npm:
+        description: "Publish to npm (requires NPM_TOKEN secret)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -13,7 +27,18 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
 
       - uses: pnpm/action-setup@v4
 
@@ -25,7 +50,8 @@ jobs:
 
       - name: Verify tag matches package.json version
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          TAG="${TAG#v}"
           VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG" != "$VERSION" ]; then
             echo "Tag v${TAG} does not match package.json version ${VERSION}"
@@ -56,15 +82,17 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        if: github.event_name == 'push' || inputs.skip_github_release != true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
           body: ${{ steps.changelog.outputs.body }}
           draft: false
           prerelease: false
 
       - name: Publish to npm
+        if: github.event_name == 'push' || inputs.publish_npm == true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

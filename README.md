@@ -255,6 +255,12 @@ git push origin v0.1.13
 
 4. The **Tag Release** workflow runs on `v*` tags: creates a GitHub Release from `CHANGELOG.md`, then publishes to npm when `NPM_TOKEN` is configured.
 
+**Re-run without deleting a tag:** GitHub → Actions → **Tag Release** → **Run workflow**
+
+- `tag`: `v0.1.13`
+- `skip_github_release`: ✅ (release already exists)
+- `publish_npm`: ✅ (requires `NPM_TOKEN`)
+
 Set `NPM_TOKEN` in repo secrets (npm granular token with publish access to `@chendpoc`).
 
 ## Development
