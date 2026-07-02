@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      lru-cache:
+        specifier: ^11.5.1
+        version: 11.5.1
     devDependencies:
       '@earendil-works/pi-agent-core':
         specifier: '*'
