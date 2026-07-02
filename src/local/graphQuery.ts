@@ -47,6 +47,7 @@ export class LocalGraphQuerier {
   private entityById = new Map<string, BundleEntity>();
   private entityByLabel = new Map<string, BundleEntity>();
   private loaded = false;
+  private graphMtime = 0;
 
   constructor(private readonly bundleRoot: string) {}
 
@@ -68,6 +69,7 @@ export class LocalGraphQuerier {
           this.entityByLabel.set(alias.toLowerCase(), e);
         }
       }
+      this.graphMtime = fs.statSync(graphPath).mtimeMs;
       this.loaded = true;
       return true;
     } catch {
@@ -77,6 +79,28 @@ export class LocalGraphQuerier {
 
   isLoaded(): boolean {
     return this.loaded;
+  }
+
+  /**
+   * Returns true when the on-disk graph.json has changed since the last load().
+   * Always returns false when not yet loaded.
+   */
+  isStale(): boolean {
+    if (!this.loaded) return false;
+    const graphPath = path.join(this.bundleRoot, "current", "graph.json");
+    try {
+      return fs.statSync(graphPath).mtimeMs !== this.graphMtime;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Re-loads from disk if isStale(). Returns true when a reload actually happened.
+   */
+  reloadIfStale(): boolean {
+    if (!this.isStale()) return false;
+    return this.load();
   }
 
   private findEntity(mention: string): BundleEntity | null {

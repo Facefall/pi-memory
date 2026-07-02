@@ -5,6 +5,8 @@ export interface SchedulerConfig {
   interval: string | null;
   /** Passed through to trainBundle. */
   trainConfig?: Omit<TrainBundleConfig, "full" | "dryRun">;
+  /** Called after a successful train tick (no error). Use to notify MemoryService. */
+  onSuccess?: () => void;
 }
 
 export interface TrainScheduler {
@@ -69,6 +71,7 @@ export function createTrainScheduler(
         full: false,
         dryRun: false,
       });
+      config.onSuccess?.();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }

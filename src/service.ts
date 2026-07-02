@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { MemoryConfig } from "./config.js";
+import { invalidateMemoryCaches } from "./cache/memoryCaches.js";
 import { LocalGraphQuerier } from "./local/graphQuery.js";
 import { currentBundleReadable } from "./sidecar/bundle.js";
 import { SidecarClient } from "./sidecar/client.js";
@@ -45,6 +46,9 @@ export class MemoryService {
   private abort: AbortController | null = null;
   private scheduler: TrainScheduler | null = null;
   private sessionIndex: SessionIndex | null = null;
+  private bundleMtimes: { graph: number; manifest: number } | null = null;
+  private lastBundleCheckMs = 0;
+  private static readonly BUNDLE_CHECK_INTERVAL_MS = 5_000;
 
   constructor(private cfg: MemoryConfig) {}
 
@@ -141,9 +145,61 @@ export class MemoryService {
           sessionsDir: this.cfg.sessionsDir,
           bundleRoot: this.cfg.bundleRoot,
         },
+        onSuccess: () => { void this.notifyBundleUpdated(); },
       },
       logger,
     );
+  }
+
+  /**
+   * Check if the on-disk bundle has changed and hot-reload if needed.
+   * Debounced to at most once per BUNDLE_CHECK_INTERVAL_MS to avoid excess stat calls.
+   * For local_graph, reloads LocalGraphQuerier in-process.
+   * For sidecar, issues a /bundle/reload request.
+   * Invalidates all memory caches on successful reload.
+   */
+  async ensureFreshBundle(): Promise<void> {
+    if (this.serviceStatus !== "ready") return;
+    const now = Date.now();
+    if (now - this.lastBundleCheckMs < MemoryService.BUNDLE_CHECK_INTERVAL_MS) return;
+    this.lastBundleCheckMs = now;
+
+    if (this.mode === "local_graph" && this.localQuerier) {
+      const reloaded = this.localQuerier.reloadIfStale();
+      if (reloaded) invalidateMemoryCaches();
+      return;
+    }
+
+    if (this.mode === "sidecar" && this.client) {
+      const graphPath = path.join(this.cfg.bundleRoot, "current", "graph.json");
+      const manifestPath = path.join(this.cfg.bundleRoot, "current", "manifest.json");
+      try {
+        const graphMtime = fs.statSync(graphPath).mtimeMs;
+        const manifestMtime = fs.statSync(manifestPath).mtimeMs;
+        if (!this.bundleMtimes) {
+          this.bundleMtimes = { graph: graphMtime, manifest: manifestMtime };
+          return;
+        }
+        const changed =
+          graphMtime !== this.bundleMtimes.graph ||
+          manifestMtime !== this.bundleMtimes.manifest;
+        if (!changed) return;
+        this.bundleMtimes = { graph: graphMtime, manifest: manifestMtime };
+        await this.client.reload();
+        invalidateMemoryCaches();
+      } catch {
+        /* stat or reload failure — continue with current bundle */
+      }
+    }
+  }
+
+  /**
+   * Force an immediate bundle freshness check (bypasses the debounce).
+   * Called by the auto-trainer scheduler after a successful train run.
+   */
+  async notifyBundleUpdated(): Promise<void> {
+    this.lastBundleCheckMs = 0;
+    await this.ensureFreshBundle();
   }
 
   startSessionIndex(): void {
@@ -211,6 +267,7 @@ export class MemoryService {
     if (this.serviceStatus !== "ready") {
       return { env: null, errorClass: "unavailable" };
     }
+    await this.ensureFreshBundle();
 
     if (this.client && this.mode === "sidecar") {
       const timeout = AbortSignal.timeout(this.cfg.queryTimeoutMs);
