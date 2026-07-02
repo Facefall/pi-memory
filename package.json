@@ -1,0 +1,78 @@
+{
+  "name": "@chendpoc/pi-memory",
+  "version": "0.1.0",
+  "description": "Local episodic memory for Pi agent — TLM sidecar + memory_recall (mode B)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./extension": {
+      "types": "./dist/pi-extension.d.ts",
+      "import": "./dist/pi-extension.js"
+    }
+  },
+  "bin": {
+    "pi-memory": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist",
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi-agent",
+    "tlm",
+    "episodic-memory",
+    "sidecar"
+  ],
+  "license": "MIT",
+  "author": "chendpoc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chendpoc/pi-memory.git"
+  },
+  "homepage": "https://github.com/chendpoc/pi-memory#readme",
+  "pi": {
+    "extensions": [
+      "./src/pi-extension.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.10.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.10.0",
+    "typebox": "*",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
+  }
+}
