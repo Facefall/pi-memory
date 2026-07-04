@@ -1,4 +1,6 @@
-# Windows Task Scheduler — daily 03:00 consolidate
+# Windows Task Scheduler — daily 03:00 maintenance
+#
+# Runs consolidate, then drain-shutdown-queue in one invocation.
 #
 # Prerequisites:
 #   1. pnpm build
@@ -8,25 +10,25 @@
 # Option A — schtasks with wrapper script (recommended):
 #
 #   schtasks /Create ^
-#     /TN "PiMemoryConsolidate" ^
+#     /TN "PiMemoryMaintenance" ^
 #     /TR "C:\path\to\pi-memory\templates\consolidate.cmd" ^
 #     /SC DAILY /ST 03:00 /F
 #
 # Option B — schtasks inline (replace paths):
 #
 #   schtasks /Create ^
-#     /TN "PiMemoryConsolidate" ^
-#     /TR "\"C:\Program Files\nodejs\node.exe\" \"C:\path\to\pi-memory\dist\cli.js\" consolidate --cron --verbose" ^
+#     /TN "PiMemoryMaintenance" ^
+#     /TR "\"C:\Program Files\nodejs\node.exe\" \"C:\path\to\pi-memory\dist\cli.js\" maintenance --cron --verbose" ^
 #     /SC DAILY /ST 03:00 /F
 #
 # Set env vars for the task (Task Scheduler → Properties → Environment):
-#   PI_MEMORY_ENV_FILE = %USERPROFILE%\.pi\.env
+#   PI_MEMORY_ENV_FILE = %USERPROFILE%\.pi\agent\pi-memory.env
 #   PI_MEMORY_AGENT_DIR = %USERPROFILE%\.pi\pi-memory-data
 #
 # Manual test:
-#   schtasks /Run /TN "PiMemoryConsolidate"
+#   schtasks /Run /TN "PiMemoryMaintenance"
 #
 # Remove:
-#   schtasks /Delete /TN "PiMemoryConsolidate" /F
+#   schtasks /Delete /TN "PiMemoryMaintenance" /F
 #
-# Logs: %USERPROFILE%\.pi\logs\consolidate.log
+# Logs: %USERPROFILE%\.pi\logs\maintenance.log

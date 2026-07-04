@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { SCHEDULER_TEMPLATE_FILES } from "../src/constants/index.js";
 import {
   buildConsolidateCliArgs,
+  buildMaintenanceCliArgs,
   defaultMemoryAgentDir,
   defaultPiConfigDir,
   expandHomePath,
@@ -85,9 +86,9 @@ describe("scheduler", () => {
     expect(getConsolidateTemplateNames("darwin")).toContain(SCHEDULER_TEMPLATE_FILES.launchd);
   });
 
-  it("builds consolidate argv", () => {
-    expect(buildConsolidateCliArgs({ cron: true, verbose: true })).toEqual([
-      "consolidate",
+  it("builds maintenance argv", () => {
+    expect(buildMaintenanceCliArgs({ cron: true, verbose: true })).toEqual([
+      "maintenance",
       "--cron",
       "--verbose",
     ]);

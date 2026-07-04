@@ -4,6 +4,20 @@ import { parseCliArgs } from "../src/cli/parseArgs.js";
 import { resolveAgentDirFromEnv } from "../src/config/agentDir.js";
 
 describe("parseCliArgs", () => {
+  it("parses maintenance flags", () => {
+    expect(parseCliArgs(["maintenance", "--cron", "--force", "--verbose"])).toEqual({
+      command: "maintenance",
+      options: { cron: true, force: true, verbose: true, agentDir: undefined },
+    });
+  });
+
+  it("parses drain-shutdown-queue command", () => {
+    expect(parseCliArgs(["drain-shutdown-queue", "--verbose"])).toEqual({
+      command: "drain-shutdown-queue",
+      options: { verbose: true, agentDir: undefined },
+    });
+  });
+
   it("parses consolidate flags", () => {
     expect(parseCliArgs(["consolidate", "--cron", "--force", "--verbose"])).toEqual({
       command: "consolidate",

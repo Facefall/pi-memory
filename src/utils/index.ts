@@ -55,8 +55,10 @@ export {
 
 export {
   buildConsolidateCliArgs,
+  buildMaintenanceCliArgs,
   defaultConsolidateSchedulerPaths,
   formatConsolidateCronLine,
+  formatMaintenanceCronLine,
   getConsolidateSchedulerKind,
   getConsolidateTemplateNames,
   type ConsolidateCliInvocation,

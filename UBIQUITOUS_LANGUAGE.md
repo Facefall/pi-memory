@@ -30,7 +30,7 @@
 | **Compact Delta** | New Memory Export facts filtered against existing Ground Truth before append (subagent). | Stage1, shutdown extract |
 | **Dual-Purpose Summary** | One LLM compact output with Session Context and Memory Export sections. | compact summary |
 | **Consolidate** | Periodic LLM merge/dedupe of Ground Truth; not a source of new facts. | GC, merge |
-| **Shutdown Queue** | Append-only JSONL file (`.memory_shutdown_queue.jsonl`) of session metadata on shutdown. | session enqueue pipeline |
+| **Shutdown Queue** | Append-only JSONL file (`.memory_shutdown_queue.jsonl`) of session metadata on shutdown; drained by `pi-memory maintenance`. | session enqueue pipeline |
 
 ## Infrastructure
 
@@ -66,7 +66,7 @@
 >
 > **Dev:** "What happens on **session_shutdown**?"
 >
-> **Domain expert:** "We append one line to the **Shutdown Queue**—session file, parent path, reason. No LLM. The main write path remains **Compact Delta** through **appendFromCompaction**."
+> **Domain expert:** "We append one line to the **Shutdown Queue**—session file, parent path, reason. No LLM on shutdown. **`pi-memory maintenance`** drains the queue offline (after consolidate), reusing **Compact Delta** rules for subagents."
 >
 > **Dev:** "If **Sidecar** is down, does **Preflight** fail?"
 >
@@ -78,4 +78,4 @@
 - **sqlite-vec** implied ANN search — MVP uses **better-sqlite3 + full-table cosine scan**; ANN is future work.
 - **NDJSON / ndjson** — canonical term is **JSONL Framing** (one JSON object per line).
 - **memoryQueue / onDirty / Stage1** — replaced by **appendFromCompaction**, **onSyncToSidecar**, and **Compact Delta**.
-- **Chunking (~2000 tokens)** — Kocoro-style; MVP indexes **one Memory Entry = one vector chunk** (`chunk_id = entry.id`).
+- **MVP chunking**：**1 Memory Entry = 1+ vector chunks**；超过 `PI_MEMORY_CHUNK_MAX_CHARS`（默认 512）按段落/句界拆分，`chunk_id = entry.id` 或 `entry.id#N`；embed 文本带 `[Section]` 前缀。Ground Truth 仍为 1 bullet = 1 entry。

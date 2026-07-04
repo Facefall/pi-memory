@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
-import { loadEnv } from "./config/loadEnv.js";
-import { resolveAgentDirFromEnv } from "./config/agentDir.js";
 import { createLlmClient } from "./adapters/llm/index.js";
-import { runConsolidateJob } from "./consolidate/runJob.js";
+import { resolveAgentDirFromEnv } from "./config/agentDir.js";
+import { loadEnv } from "./config/loadEnv.js";
+import {
+  runConsolidateCommand,
+  runDrainShutdownQueueCommand,
+  runMaintenanceCommand,
+} from "./cli/jobs.js";
 import { createCliLog } from "./cli/log.js";
 import { CLI_HELP, parseCliArgs } from "./cli/parseArgs.js";
 import { runInitCommand } from "./cli/init.js";
@@ -37,45 +41,58 @@ async function main(): Promise<number> {
     return runStatusCommand(agentDir, log);
   }
 
-  const { options } = parsed;
-  const log = createCliLog({ verbose: options.verbose });
-
   const store = createMemoryStore({ agentDir });
   await store.ensureInitialized();
 
   const llm = await createLlmClient();
-  if (options.verbose && !llm) {
-    log.warn("no helper LLM configured; using rule-based dedupe only");
+
+  if (parsed.command === "maintenance") {
+    const log = createCliLog({ verbose: parsed.options.verbose });
+    if (parsed.options.verbose && !llm) {
+      log.warn(
+        "no helper LLM configured; consolidate uses rule-based dedupe; shutdown drain skips LLM extract",
+      );
+    }
+    return runMaintenanceCommand({
+      store,
+      agentDir,
+      llm,
+      options: parsed.options,
+      log,
+    });
   }
 
-  log.debug(`consolidate agentDir=${agentDir} cron=${options.cron} force=${options.force}`);
-
-  const result = await runConsolidateJob({
-    store,
-    agentDir,
-    llm,
-    cronFired: options.cron,
-    force: options.force,
-  });
-
-  switch (result.status) {
-    case "skipped":
-      log.warn("consolidate skipped (conditions not met)");
-      return 0;
-    case "consolidated":
-      log.success("consolidate complete");
-      if (options.verbose) {
-        log.line("entries", `${result.stats.entriesBefore} → ${result.stats.entriesAfter}`);
-        log.line("overflow files", `${result.stats.overflowBefore} → ${result.stats.overflowAfter}`);
-        if (result.stats.indexGeneration !== undefined) {
-          log.line("index generation", String(result.stats.indexGeneration));
-        }
-      }
-      return 0;
-    case "failed":
-      log.error(`consolidate failed: ${result.error.message}`);
-      return 1;
+  if (parsed.command === "drain-shutdown-queue") {
+    const log = createCliLog({ verbose: parsed.options.verbose });
+    if (parsed.options.verbose && !llm) {
+      log.warn("no helper LLM configured; shutdown drain skips sessions without compaction export");
+    }
+    return runDrainShutdownQueueCommand({
+      store,
+      agentDir,
+      llm,
+      verbose: parsed.options.verbose,
+      log,
+    });
   }
+
+  if (parsed.command === "consolidate") {
+    const log = createCliLog({ verbose: parsed.options.verbose });
+    if (parsed.options.verbose && !llm) {
+      log.warn("no helper LLM configured; using rule-based dedupe only");
+    }
+    return runConsolidateCommand({
+      store,
+      agentDir,
+      llm,
+      cron: parsed.options.cron,
+      force: parsed.options.force,
+      verbose: parsed.options.verbose,
+      log,
+    });
+  }
+
+  return 1;
 }
 
 main().then(

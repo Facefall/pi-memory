@@ -1,4 +1,10 @@
-export type CliCommand = "consolidate" | "init" | "status" | "help";
+export type CliCommand =
+  | "consolidate"
+  | "maintenance"
+  | "drain-shutdown-queue"
+  | "init"
+  | "status"
+  | "help";
 
 export type CommonCliOptions = {
   agentDir?: string;
@@ -10,6 +16,10 @@ export type ConsolidateCliOptions = CommonCliOptions & {
   force: boolean;
 };
 
+export type MaintenanceCliOptions = ConsolidateCliOptions;
+
+export type DrainShutdownQueueCliOptions = CommonCliOptions;
+
 export type StatusCliOptions = CommonCliOptions;
 
 export type InitCliOptions = CommonCliOptions;
@@ -17,6 +27,8 @@ export type InitCliOptions = CommonCliOptions;
 export type ParsedCli =
   | { command: "help"; error?: string }
   | { command: "consolidate"; options: ConsolidateCliOptions }
+  | { command: "maintenance"; options: MaintenanceCliOptions }
+  | { command: "drain-shutdown-queue"; options: DrainShutdownQueueCliOptions }
   | { command: "init"; options: InitCliOptions }
   | { command: "status"; options: StatusCliOptions };
 
@@ -47,33 +59,10 @@ function parseCommonFlags(
   return options;
 }
 
-export function parseCliArgs(argv: string[]): ParsedCli {
-  const args = argv.filter((arg) => arg !== "--");
-  if (args.length === 0) {
-    return { command: "help" };
-  }
-
-  const [command, ...rest] = args;
-  if (command === "help" || command === "--help" || command === "-h") {
-    return { command: "help" };
-  }
-
-  if (command === "status") {
-    const parsed = parseCommonFlags(rest, { verbose: false });
-    if ("command" in parsed) return parsed;
-    return { command: "status", options: parsed };
-  }
-
-  if (command === "init") {
-    const parsed = parseCommonFlags(rest, { verbose: false });
-    if ("command" in parsed) return parsed;
-    return { command: "init", options: parsed };
-  }
-
-  if (command !== "consolidate") {
-    return { command: "help", error: `Unknown command: ${command}` };
-  }
-
+function parseConsolidateLikeFlags(
+  rest: string[],
+  command: Extract<CliCommand, "consolidate" | "maintenance">,
+): ParsedCli {
   const options: ConsolidateCliOptions = {
     cron: false,
     force: false,
@@ -104,7 +93,47 @@ export function parseCliArgs(argv: string[]): ParsedCli {
     }
   }
 
-  return { command: "consolidate", options };
+  return { command, options };
+}
+
+export function parseCliArgs(argv: string[]): ParsedCli {
+  const args = argv.filter((arg) => arg !== "--");
+  if (args.length === 0) {
+    return { command: "help" };
+  }
+
+  const [command, ...rest] = args;
+  if (command === "help" || command === "--help" || command === "-h") {
+    return { command: "help" };
+  }
+
+  if (command === "status") {
+    const parsed = parseCommonFlags(rest, { verbose: false });
+    if ("command" in parsed) return parsed;
+    return { command: "status", options: parsed };
+  }
+
+  if (command === "init") {
+    const parsed = parseCommonFlags(rest, { verbose: false });
+    if ("command" in parsed) return parsed;
+    return { command: "init", options: parsed };
+  }
+
+  if (command === "consolidate") {
+    return parseConsolidateLikeFlags(rest, "consolidate");
+  }
+
+  if (command === "maintenance") {
+    return parseConsolidateLikeFlags(rest, "maintenance");
+  }
+
+  if (command === "drain-shutdown-queue") {
+    const parsed = parseCommonFlags(rest, { verbose: false });
+    if ("command" in parsed) return parsed;
+    return { command: "drain-shutdown-queue", options: parsed };
+  }
+
+  return { command: "help", error: `Unknown command: ${command}` };
 }
 
 export const CLI_HELP = `pi-memory — standalone tools for Pi local memory
@@ -112,30 +141,35 @@ export const CLI_HELP = `pi-memory — standalone tools for Pi local memory
 Usage:
   pi-memory init [options]
   pi-memory status [options]
+  pi-memory maintenance [options]
   pi-memory consolidate [options]
+  pi-memory drain-shutdown-queue [options]
 
 Commands:
-  init                Create MEMORY.md from template when missing or empty
-  status              Print MEMORY.md, sidecar, and vector index diagnostics
-  consolidate         Run consolidate job (dedupe + optional reindex)
+  init                    Create MEMORY.md from template when missing or empty
+  status                  Print MEMORY.md, sidecar, and vector index diagnostics
+  maintenance             Daily job: consolidate, then drain shutdown queue
+  consolidate             Run consolidate job (dedupe + optional reindex)
+  drain-shutdown-queue    Ingest durable facts from queued session shutdown metadata
 
 Options:
-  --agent-dir PATH    Memory data directory (overrides PI_MEMORY_AGENT_DIR)
-  --verbose, -v       Extra stderr output (TTY colors when supported)
+  --agent-dir PATH        Memory data directory (overrides PI_MEMORY_AGENT_DIR)
+  --verbose, -v           Extra stderr output (TTY colors when supported)
 
-Consolidate-only:
-  --cron              Daily OS cron slot (passes cronFired to shouldConsolidate)
-  --force             Run even when shouldConsolidate is false
+Consolidate / maintenance:
+  --cron                  Daily OS cron slot (passes cronFired to shouldConsolidate)
+  --force                 Run consolidate even when shouldConsolidate is false
 
 Environment:
-  PI_MEMORY_ENV_FILE   Explicit .env path
-  PI_MEMORY_AGENT_DIR  Memory data root; default ~/.pi/pi-memory-data
-  PI_MEMORY_DEBUG=1    Debug stderr logs (extension preflight + CLI)
-  NO_COLOR             Disable chalk colors
+  PI_MEMORY_ENV_FILE        Explicit .env path
+  PI_MEMORY_AGENT_DIR       Memory data root; default ~/.pi/pi-memory-data
+  PI_MEMORY_DEBUG=1         Debug stderr logs (extension preflight + CLI)
+  NO_COLOR                  Disable chalk colors
 
 Examples:
   pi-memory init
   pi-memory status
-  pi-memory consolidate --cron
+  pi-memory maintenance --cron --verbose
   pi-memory consolidate --force --verbose
+  pi-memory drain-shutdown-queue --verbose
 `;

@@ -1,4 +1,8 @@
-# Daily 03:00 consolidate via OS cron (Linux/macOS crontab)
+# Daily 03:00 maintenance via OS cron (Linux/macOS crontab)
+#
+# Runs in one window:
+#   1. consolidate — dedupe / merge MEMORY.md
+#   2. drain-shutdown-queue — ingest facts from sessions that never compacted
 #
 # Install:
 #   1. Replace paths below, then: crontab -e
@@ -7,4 +11,4 @@
 # __NODE__ = which node
 # __CLI__  = path to pi-memory/dist/cli.js (after pnpm build)
 #
-0 3 * * * PI_MEMORY_ENV_FILE=$HOME/.pi/agent/pi-memory.env PI_MEMORY_AGENT_DIR=$HOME/.pi/pi-memory-data __NODE__ __CLI__ consolidate --cron --verbose >> $HOME/.pi/logs/consolidate.log 2>&1
+0 3 * * * PI_MEMORY_ENV_FILE=$HOME/.pi/agent/pi-memory.env PI_MEMORY_AGENT_DIR=$HOME/.pi/pi-memory-data __NODE__ __CLI__ maintenance --cron --verbose >> $HOME/.pi/logs/maintenance.log 2>&1

@@ -47,18 +47,25 @@ export type ConsolidateCliInvocation = {
   agentDir?: string;
 };
 
-/** argv for `pi-memory consolidate` (OS scheduler / wrapper scripts). */
-export function buildConsolidateCliArgs(opts: Pick<ConsolidateCliInvocation, "cron" | "verbose" | "agentDir">): string[] {
-  const args = ["consolidate"];
+/** argv for `pi-memory maintenance` (OS scheduler / wrapper scripts). */
+export function buildMaintenanceCliArgs(
+  opts: Pick<ConsolidateCliInvocation, "cron" | "verbose" | "agentDir">,
+): string[] {
+  const args = ["maintenance"];
   if (opts.cron) args.push("--cron");
   if (opts.verbose) args.push("--verbose");
   if (opts.agentDir) args.push("--agent-dir", opts.agentDir);
   return args;
 }
 
+/** @deprecated Prefer buildMaintenanceCliArgs for OS schedulers. */
+export function buildConsolidateCliArgs(opts: Pick<ConsolidateCliInvocation, "cron" | "verbose" | "agentDir">): string[] {
+  return buildMaintenanceCliArgs(opts);
+}
+
 /** Single-line shell command (macOS / Linux crontab). */
-export function formatConsolidateCronLine(opts: ConsolidateCliInvocation & ConsolidateSchedulerPaths): string {
-  const args = buildConsolidateCliArgs(opts).join(" ");
+export function formatMaintenanceCronLine(opts: ConsolidateCliInvocation & ConsolidateSchedulerPaths): string {
+  const args = buildMaintenanceCliArgs(opts).join(" ");
   return [
     `PI_MEMORY_ENV_FILE=${opts.envFile}`,
     `PI_MEMORY_AGENT_DIR=${opts.agentDir}`,
@@ -67,6 +74,11 @@ export function formatConsolidateCronLine(opts: ConsolidateCliInvocation & Conso
     args,
     `>> ${opts.stdoutLog} 2>&1`,
   ].join(" ");
+}
+
+/** @deprecated Prefer formatMaintenanceCronLine. */
+export function formatConsolidateCronLine(opts: ConsolidateCliInvocation & ConsolidateSchedulerPaths): string {
+  return formatMaintenanceCronLine(opts);
 }
 
 export type ConsolidateTemplateName =
