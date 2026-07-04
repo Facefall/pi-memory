@@ -7,6 +7,7 @@ import {
   SIDECAR_QUERY_TIMEOUT_MS,
   SIDECAR_REINDEX_TIMEOUT_MS,
 } from "../constants/timing.js";
+import { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "../ipc/jsonlFramer.js";
 import { isErrorResponse, type IndexDocument, type SidecarResponse } from "./protocol.js";
 
 export function sidecarRequest<T extends SidecarResponse>(
@@ -16,7 +17,7 @@ export function sidecarRequest<T extends SidecarResponse>(
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(socketPath);
-    let buffer = "";
+    const framer = new JsonlFramer();
 
     const timer = setTimeout(() => {
       socket.destroy();
@@ -24,30 +25,30 @@ export function sidecarRequest<T extends SidecarResponse>(
     }, timeoutMs);
 
     socket.on("connect", () => {
-      socket.write(JSON.stringify(frame) + "\n");
+      socket.write(serializeJsonlFrame(frame));
     });
 
     socket.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const idx = buffer.indexOf("\n");
-      if (idx === -1) return;
-      clearTimeout(timer);
-      socket.end();
+      for (const line of framer.push(chunk.toString())) {
+        clearTimeout(timer);
+        socket.end();
 
-      let response: SidecarResponse;
-      try {
-        response = JSON.parse(buffer.slice(0, idx)) as SidecarResponse;
-      } catch {
-        reject(new Error("Invalid JSON response from sidecar"));
+        let response: SidecarResponse;
+        try {
+          response = parseJsonlLine<SidecarResponse>(line);
+        } catch {
+          reject(new Error("Invalid JSON response from sidecar"));
+          return;
+        }
+
+        if (isErrorResponse(response)) {
+          reject(new Error(response.error));
+          return;
+        }
+
+        resolve(response as T);
         return;
       }
-
-      if (isErrorResponse(response)) {
-        reject(new Error(response.error));
-        return;
-      }
-
-      resolve(response as T);
     });
 
     socket.on("error", reject);
@@ -67,18 +68,27 @@ export async function ping(socketPath: string): Promise<boolean> {
   }
 }
 
-export async function query(socketPath: string, queryText: string) {
+export async function query(
+  socketPath: string,
+  queryText: string,
+  timeoutMs = SIDECAR_QUERY_TIMEOUT_MS,
+) {
   const request_id = randomUUID();
   return sidecarRequest<Extract<SidecarResponse, { type: "result" }>>(
     socketPath,
     { type: "query", request_id, query: queryText },
-    SIDECAR_QUERY_TIMEOUT_MS,
+    timeoutMs,
   );
 }
 
-export async function reindex(socketPath: string, documents: IndexDocument[] = []) {
+export type ReindexResult = Extract<SidecarResponse, { type: "reindex_ok" }>;
+
+export async function reindex(
+  socketPath: string,
+  documents: IndexDocument[] = [],
+): Promise<ReindexResult> {
   const request_id = randomUUID();
-  return sidecarRequest<Extract<SidecarResponse, { type: "reindex_ok" }>>(
+  return sidecarRequest<ReindexResult>(
     socketPath,
     { type: "reindex", request_id, documents },
     SIDECAR_REINDEX_TIMEOUT_MS,

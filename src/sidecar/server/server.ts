@@ -1,8 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { SIDECAR_PID_SUFFIX } from "../../constants/paths.js";
+import { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "../../ipc/jsonlFramer.js";
 import { mkdirOptions } from "../../utils/paths.js";
 import { cleanupSocketFiles, removeSocketFile, secureSocketPath } from "../../utils/socket.js";
 import type { SidecarRequest, SidecarResponse } from "../protocol.js";
@@ -20,7 +21,7 @@ export type SidecarServer = {
 };
 
 function writeResponse(socket: Socket, response: SidecarResponse): void {
-  socket.write(JSON.stringify(response) + "\n");
+  socket.write(serializeJsonlFrame(response));
 }
 
 function writeError(socket: Socket, error: string, requestId?: string): void {
@@ -59,19 +60,13 @@ export function createSidecarServer(opts: SidecarServerOpts): SidecarServer {
   removeSocketFile(opts.socketPath);
 
   const server = createServer((socket) => {
-    let buffer = "";
+    const framer = new JsonlFramer();
 
     socket.on("data", (chunk) => {
-      buffer += chunk.toString();
-      let idx: number;
-      while ((idx = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 1);
-        if (!line.trim()) continue;
-
+      for (const line of framer.push(chunk.toString())) {
         let frame: SidecarRequest;
         try {
-          frame = JSON.parse(line) as SidecarRequest;
+          frame = parseJsonlLine<SidecarRequest>(line);
         } catch {
           writeError(socket, "invalid JSON frame");
           continue;
