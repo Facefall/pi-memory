@@ -6,6 +6,10 @@ export const DEFAULT_LLM_COMPAT_TIMEOUT_MS = 120_000;
 
 /** Preflight episodic retrieval. */
 export const DEFAULT_PREFLIGHT_TIMEOUT_MS = 800;
+export const PREFLIGHT_INTENT_BUDGET_MS = 200;
+
+/** Sidecar query cache (extension process). */
+export const QUERY_CACHE_MAX_ENTRIES = 500;
 
 /** Debounced sidecar reindex after MEMORY writes. */
 export const DEFAULT_REINDEX_DEBOUNCE_MS = 500;

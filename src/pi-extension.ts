@@ -12,6 +12,7 @@ import { runEpisodicPreflight } from "./preflight/episodic.js";
 import { mergePrivateMemoryBlocks, renderMemoryCapPrivateMemory } from "./preflight/render.js";
 import { isSubagentSession } from "./preflight/session.js";
 import { injectPrivateMemoryContext } from "./preflight/strip.js";
+import { enqueueShutdownMetadata, readParentSession } from "./shutdown/enqueue.js";
 import { resolveSidecarPaths } from "./sidecar/paths.js";
 import { createReindexScheduler, type ReindexScheduler } from "./sidecar/reindexBridge.js";
 import { ensureSidecarRunning, stopSidecar } from "./sidecar/sidecarManager.js";
@@ -71,6 +72,7 @@ async function bootstrapSidecar(): Promise<void> {
 
   reindexScheduler ??= createReindexScheduler({
     sidecar: sidecarPaths,
+    agentDir: memoryStore.agentDir,
     getDocuments: () => memoryStore!.exportForIndex(),
     debounceMs: readPiMemoryEnv().reindexDebounceMs,
   });
@@ -127,7 +129,18 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
     }
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (event, ctx) => {
+    if (memoryStore) {
+      const header = ctx.sessionManager.getHeader() as unknown as Record<string, unknown> | null;
+      void enqueueShutdownMetadata(memoryStore.agentDir, {
+        sessionFile: ctx.sessionManager.getSessionFile() ?? "",
+        parentSession: readParentSession(header),
+        reason: event.reason,
+        isSubagent,
+        enqueuedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     stopConsolidateInterval?.();
     stopConsolidateInterval = null;
     consolidateScheduler = null;
@@ -178,6 +191,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
       const env = readPiMemoryEnv();
       const result = await runEpisodicPreflight(userPayload, {
         socketPath: sidecarPaths.socketPath,
+        agentDir: memoryStore.agentDir,
         store: memoryStore,
         llm: llmClient,
         force: forceHelper,
@@ -216,9 +230,11 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
       if (isSubagent) {
         privateContext = sessionMemoryCap ?? undefined;
         userPayload = scaffolded;
+        turnPreflight = { userPayload: scaffolded, privateContext: privateContext ?? "" };
       } else {
         const preflight = await runEpisodicPreflight(scaffolded, {
           socketPath: sidecarPaths.socketPath,
+          agentDir: memoryStore.agentDir,
           store: memoryStore,
           llm: llmClient,
           force: userTurnCount === 1,

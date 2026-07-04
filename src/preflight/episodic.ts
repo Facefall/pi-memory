@@ -1,4 +1,4 @@
-import { DEFAULT_PREFLIGHT_TIMEOUT_MS } from "../constants/timing.js";
+import { DEFAULT_PREFLIGHT_TIMEOUT_MS, PREFLIGHT_INTENT_BUDGET_MS } from "../constants/timing.js";
 import type { LlmClient } from "../adapters/llm/types.js";
 import type { MemoryStore } from "../store/memoryStore.js";
 import { query } from "../sidecar/client.js";
@@ -7,6 +7,7 @@ import {
   extractQueryIntent,
   shouldRunEpisodicPreflight,
 } from "./queryIntent.js";
+import { sidecarQueryCache } from "./queryCache.js";
 import {
   renderFallbackPrivateMemory,
   renderSidecarPrivateMemory,
@@ -14,6 +15,7 @@ import {
 
 export type EpisodicPreflightOptions = {
   socketPath: string;
+  agentDir: string;
   store: MemoryStore;
   llm?: LlmClient | null;
   force?: boolean;
@@ -26,9 +28,20 @@ export type EpisodicPreflightResult = {
   privateContext: string;
 };
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+function remainingMs(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
   if (signal?.aborted) {
     throw new Error("aborted");
+  }
+  if (timeoutMs <= 0) {
+    throw new Error("preflight timeout");
   }
 
   return new Promise<T>((resolve, reject) => {
@@ -68,23 +81,43 @@ export async function runEpisodicPreflight(
     }
 
     options.onProgress?.("Searching memory...");
-    const timeoutMs = options.timeoutMs ?? DEFAULT_PREFLIGHT_TIMEOUT_MS;
-    const intent = await extractQueryIntent(userInput, options.llm ?? null, {
-      force: options.force,
-      signal: options.signal,
-    });
-    const retrievalQuery = buildRetrievalQuery(intent, userInput);
+    const totalBudget = options.timeoutMs ?? DEFAULT_PREFLIGHT_TIMEOUT_MS;
+    const deadline = Date.now() + totalBudget;
 
-    let privateContext = "";
+    const intentBudget = Math.min(PREFLIGHT_INTENT_BUDGET_MS, remainingMs(deadline));
+    let intent;
     try {
-      const result = await withTimeout(
-        query(options.socketPath, retrievalQuery),
-        timeoutMs,
+      intent = await withTimeout(
+        extractQueryIntent(userInput, options.llm ?? null, {
+          force: options.force,
+          signal: options.signal,
+        }),
+        intentBudget,
         options.signal,
       );
-      privateContext = renderSidecarPrivateMemory(retrievalQuery, result.results);
     } catch {
-      // sidecar unavailable or timed out → fallback
+      intent = { raw_query: userInput.trim() };
+    }
+
+    const retrievalQuery = buildRetrievalQuery(intent, userInput);
+    const cached = sidecarQueryCache.get(options.agentDir, retrievalQuery);
+
+    let privateContext = "";
+    if (cached) {
+      privateContext = renderSidecarPrivateMemory(retrievalQuery, cached);
+    } else {
+      const queryBudget = remainingMs(deadline);
+      try {
+        const result = await withTimeout(
+          query(options.socketPath, retrievalQuery, queryBudget),
+          queryBudget,
+          options.signal,
+        );
+        sidecarQueryCache.set(options.agentDir, retrievalQuery, result.results);
+        privateContext = renderSidecarPrivateMemory(retrievalQuery, result.results);
+      } catch {
+        // sidecar unavailable or timed out → fallback
+      }
     }
 
     if (!privateContext.trim()) {
