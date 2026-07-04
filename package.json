@@ -22,6 +22,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "rm -rf dist && tsc",
+    "postinstall": "node ./scripts/postinstall.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -38,6 +39,11 @@
     "dist",
     "src/**/*.ts",
     "!src/**/*.test.ts",
+    "templates/MEMORY.md.example",
+    "scripts/path-utils.mjs",
+    "scripts/init-memory-workspace.mjs",
+    "scripts/platform-fs.mjs",
+    "scripts/postinstall.mjs",
     "README.md",
     "UBIQUITOUS_LANGUAGE.md"
   ],
@@ -69,7 +75,7 @@
     "@earendil-works/pi-agent-core": "*",
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+    "typebox": "^1.1.38"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.10.0"
@@ -83,7 +89,7 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/lodash": "^4.17.24",
     "@types/node": "^24.0.0",
-    "typebox": "*",
+    "typebox": "^1.3.3",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
   },
@@ -92,11 +98,11 @@
   },
   "dependencies": {
     "chalk": "^5.6.2",
+    "dayjs": "^1.11.21",
     "dotenv": "^17.4.2",
     "execa": "^9.6.1",
     "lodash": "^4.18.1",
     "lru-cache": "^11.5.1",
-    "proper-lockfile": "^4.1.2",
-    "zod": "^4.4.3"
+    "proper-lockfile": "^4.1.2"
   }
 }

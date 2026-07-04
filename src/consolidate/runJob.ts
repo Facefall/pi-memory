@@ -38,7 +38,7 @@ export async function runConsolidateJob(
 ): Promise<RunConsolidateJobResult> {
   const llm = opts.llm ?? NOOP_LLM;
 
-  if (!opts.force && !(await opts.store.shouldConsolidate(new Date(), opts.cronFired ?? false))) {
+  if (!opts.force && !(await opts.store.shouldConsolidate(undefined, opts.cronFired))) {
     return { status: "skipped", reason: "conditions_not_met" };
   }
 

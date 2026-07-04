@@ -1,10 +1,9 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import findLastIndex from "lodash/findLastIndex.js";
 
 import { createLlmClient, type LlmClient } from "./adapters/llm/index.js";
-import { loadEnv, readPiMemoryEnv } from "./config/index.js";
+import { loadEnv, readPiMemoryEnv, resolveMemoryAgentDir } from "./config/index.js";
 import { createConsolidateScheduler, startConsolidateInterval, type ConsolidateScheduler } from "./consolidate/scheduler.js";
 import { registerCommands } from "./commands/index.js";
 import { registerCompactHandlers } from "./compact/register.js";
@@ -14,6 +13,7 @@ import { isSubagentSession } from "./preflight/session.js";
 import { injectPrivateMemoryContext } from "./preflight/strip.js";
 import { enqueueShutdownMetadata, readParentSession } from "./shutdown/enqueue.js";
 import { resolveSidecarPaths } from "./sidecar/paths.js";
+import { formatTimestamp } from "./utils/time.js";
 import { createReindexScheduler, type ReindexScheduler } from "./sidecar/reindexBridge.js";
 import { ensureSidecarRunning, stopSidecar } from "./sidecar/sidecarManager.js";
 import { MemoryStore } from "./store/memoryStore.js";
@@ -111,7 +111,7 @@ async function preloadSessionMemoryCap(): Promise<void> {
 
 export default function piMemoryExtension(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
-    const agentDir = getAgentDir();
+    const agentDir = resolveMemoryAgentDir();
     memoryStore = new MemoryStore({ agentDir });
     sidecarPaths = resolveSidecarPaths(agentDir);
     isSubagent = isSubagentSession(ctx);
@@ -137,7 +137,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
         parentSession: readParentSession(header),
         reason: event.reason,
         isSubagent,
-        enqueuedAt: new Date().toISOString(),
+        enqueuedAt: formatTimestamp(),
       }).catch(() => {});
     }
 
@@ -261,7 +261,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
   registerCommands(pi, {
     getMemoryStore: () => memoryStore,
     onRemembered: preloadSessionMemoryCap,
-    getAgentDir: () => memoryStore?.agentDir ?? getAgentDir(),
+    getAgentDir: () => memoryStore?.agentDir ?? resolveMemoryAgentDir(),
   });
 
   registerCompactHandlers(pi, {

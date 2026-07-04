@@ -1,6 +1,7 @@
-import { basename } from "node:path";
+import { pathBasename } from "../../utils/fs.js";
+import { epochTimestamp } from "../../utils/time.js";
 
-import { OVERFLOW_POINTER_RE } from "../constants.js";
+import { OVERFLOW_POINTER_RE } from "../../constants/memory.js";
 import { MEMORY_SECTIONS, type MemorySection, type ParsedEntry } from "../types.js";
 
 const SECTION_RE = /^##\s+(Preferences|Conventions|Findings|Todos)\s*$/;
@@ -26,8 +27,8 @@ export function parseMemoryMarkdown(content: string, sourceFile: string): Parsed
     if (pointerMatch) continue;
 
     const metaMatch = line.match(ENTRY_META_RE);
-    const id = metaMatch?.[1] ?? `${basename(sourceFile)}:${i + 1}`;
-    const timestamp = metaMatch?.[2] ?? new Date(0).toISOString();
+    const id = metaMatch?.[1] ?? `${pathBasename(sourceFile)}:${i + 1}`;
+    const timestamp = metaMatch?.[2] ?? epochTimestamp();
     let body = line.slice(2).replace(ENTRY_META_RE, "").trim();
     const userAuthored = USER_PREFIX_RE.test(body);
     if (userAuthored) body = body.replace(USER_PREFIX_RE, "").trim();

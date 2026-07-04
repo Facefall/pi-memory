@@ -2,6 +2,8 @@ import pickBy from "lodash/pickBy.js";
 
 import { complete, getEnvApiKey, getModels } from "@earendil-works/pi-ai/compat";
 
+import { nowMs } from "../../utils/time.js";
+
 import type { LlmClient } from "./types.js";
 import { extractTextFromResponse } from "./extractText.js";
 import { parseModelSpec } from "./modelSpec.js";
@@ -36,7 +38,7 @@ export function createStandaloneLlmClient(
             {
               role: "user",
               content: [{ type: "text", text: prompt }],
-              timestamp: Date.now(),
+              timestamp: nowMs(),
             },
           ],
         },

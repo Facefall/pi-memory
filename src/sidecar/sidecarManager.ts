@@ -1,6 +1,5 @@
 // Agent 侧：connect-or-create、spawn lock、execa 生命周期
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 import { execa } from "execa";
 
@@ -10,7 +9,8 @@ import {
   SIDECAR_SPAWN_LOCK_STALE_MS,
   SIDECAR_START_TIMEOUT_MS,
 } from "../constants/timing.js";
-import { mkdirOptions } from "../utils/paths.js";
+import { ensureDirSync, joinPath, pathDirname, pathExists } from "../utils/fs.js";
+import { nowMs } from "../utils/time.js";
 import { ping } from "./client.js";
 import { resolveSidecarEntry } from "./paths.js";
 import { canConnect, waitUntilReady } from "./utils.js";
@@ -30,7 +30,7 @@ export type SidecarOpts = {
 /** 上层唯一入口：确保 sidecar 在跑（attach 或 spawn） */
 export async function ensureSidecarRunning(opts: SidecarOpts): Promise<void> {
   const resolved = { ...opts, entry: opts.entry ?? resolveSidecarEntry() };
-  mkdirSync(dirname(resolved.socketPath), mkdirOptions());
+  ensureDirSync(pathDirname(resolved.socketPath));
 
   if (await canConnect(resolved.socketPath)) return;
 
@@ -85,14 +85,14 @@ class SidecarManager {
 }
 
 function spawnLockPath(socketPath: string): string {
-  return join(dirname(socketPath), SIDECAR_SPAWN_LOCK_FILE);
+  return joinPath(pathDirname(socketPath), SIDECAR_SPAWN_LOCK_FILE);
 }
 
 function acquireSpawnLock(socketPath: string): boolean {
   const lockPath = spawnLockPath(socketPath);
   for (let i = 0; i < 5; i++) {
     try {
-      writeFileSync(lockPath, `${process.pid}\n${Date.now()}\n`, { flag: "wx" });
+      writeFileSync(lockPath, `${process.pid}\n${nowMs()}\n`, { flag: "wx" });
       return true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -109,7 +109,7 @@ function acquireSpawnLock(socketPath: string): boolean {
 }
 
 function isLockStale(lockPath: string): boolean {
-  if (!existsSync(lockPath)) return false;
+  if (!pathExists(lockPath)) return false;
   try {
     const [pidLine = "", tsLine = "0"] = readFileSync(lockPath, "utf8").trim().split("\n");
     const pid = Number.parseInt(pidLine, 10);
@@ -121,7 +121,7 @@ function isLockStale(lockPath: string): boolean {
         return true;
       }
     }
-    return !Number.isFinite(ts) || Date.now() - ts > SIDECAR_SPAWN_LOCK_STALE_MS;
+    return !Number.isFinite(ts) || nowMs() - ts > SIDECAR_SPAWN_LOCK_STALE_MS;
   } catch {
     return true;
   }

@@ -1,6 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
 
 import { parseMemoryExport } from "../compact/parseMemoryExport.js";
 import {
@@ -20,10 +18,17 @@ import {
   DEFAULT_MEMORY_FILE,
   MEMORY_GC_FILE,
 } from "../constants/memory.js";
-import { MS_PER_DAY } from "../constants/timing.js";
 import { countLines, formatEntryLine, formatSectionHeader } from "./markdown/format.js";
 import { listOverflowPointers, parseMemoryMarkdown } from "./markdown/parse.js";
-import { defaultMemoryTemplate } from "./markdown/template.js";
+import { initializeMemoryWorkspace } from "../init/workspace.js";
+import {
+  joinPath,
+  pathBasename,
+  readText,
+  readTextRequired,
+  writeText,
+} from "../utils/fs.js";
+import { daysSince, formatLocalDate, formatTimestamp, type TimeInput } from "../utils/time.js";
 import { getAgentPaths, resolveAgentDir } from "./paths.js";
 import type {
   IndexDocument,
@@ -63,11 +68,7 @@ export class MemoryStore {
   }
 
   async ensureInitialized(): Promise<void> {
-    await this.backend.ensureAgentDir();
-    const raw = await this.backend.readText(this.paths.memoryFile);
-    if (!raw.trim()) {
-      await this.backend.writeText(this.paths.memoryFile, defaultMemoryTemplate());
-    }
+    await initializeMemoryWorkspace(this.paths.agentDir);
   }
 
   async isEmpty(): Promise<boolean> {
@@ -138,7 +139,7 @@ export class MemoryStore {
     return resolved.entries.map((entry) => ({
       id: entry.id,
       content: entry.content,
-      source: basename(entry.sourceFile),
+      source: pathBasename(entry.sourceFile),
       timestamp: entry.timestamp,
     }));
   }
@@ -261,13 +262,12 @@ export class MemoryStore {
     this.notifyAfterWrite({ skipConsolidateCheck: true });
   }
 
-  async shouldConsolidate(now = new Date(), cronFired = false): Promise<boolean> {
+  async shouldConsolidate(at?: TimeInput, cronFired = false): Promise<boolean> {
     const stats = await this.getStats();
     if (stats.overflowFileCount >= CONSOLIDATE_OVERFLOW_FILE_THRESHOLD) return true;
     if (cronFired) return true;
     if (!stats.lastConsolidatedAt) return false;
-    const days = (now.getTime() - Date.parse(stats.lastConsolidatedAt)) / MS_PER_DAY;
-    return days >= CONSOLIDATE_GC_INTERVAL_DAYS;
+    return daysSince(stats.lastConsolidatedAt, at) >= CONSOLIDATE_GC_INTERVAL_DAYS;
   }
 
   async consolidate(llm: LlmClient): Promise<void> {
@@ -286,7 +286,7 @@ export class MemoryStore {
         }
 
         await this.rewriteEntriesUnlocked(entries);
-        await writeFile(this.paths.memoryGcFile, `${new Date().toISOString()}\n`);
+        await writeText(this.paths.memoryGcFile, `${formatTimestamp()}\n`);
       });
       this.notifySyncToSidecar();
     } finally {
@@ -317,7 +317,7 @@ export class MemoryStore {
     if (!state.processed.includes(compactionId)) {
       state.processed.push(compactionId);
     }
-    await writeFile(this.paths.compactionStateFile, JSON.stringify(state, null, 2), "utf8");
+    await writeText(this.paths.compactionStateFile, JSON.stringify(state, null, 2));
   }
 
   async verifyIntegrity(): Promise<IntegrityReport> {
@@ -328,7 +328,7 @@ export class MemoryStore {
     for (const fileName of pointers) {
       const path = this.backend.autoFilePath(this.paths.agentDir, fileName);
       try {
-        await readFile(path, "utf8");
+        await readTextRequired(path);
       } catch {
         issues.push(`Missing overflow file referenced by MEMORY.md: ${fileName}`);
       }
@@ -399,7 +399,7 @@ export class MemoryStore {
       : this.newAutoFilePath();
 
     if (!targetName) {
-      targetName = basename(targetPath);
+      targetName = pathBasename(targetPath);
       await this.backend.writeText(targetPath, `${formatSectionHeader(entry.section)}\n\n`);
     }
 
@@ -486,7 +486,7 @@ export class MemoryStore {
     return {
       ...entry,
       id: entry.id || this.newEntryId(),
-      timestamp: entry.timestamp || new Date().toISOString(),
+      timestamp: entry.timestamp || formatTimestamp(),
     };
   }
 
@@ -495,23 +495,20 @@ export class MemoryStore {
   }
 
   private newAutoFilePath(): string {
-    const date = new Date().toISOString().slice(0, 10);
+    const date = formatLocalDate();
     const suffix = randomBytes(3).toString("hex");
-    return join(this.paths.agentDir, `${AUTO_FILE_PREFIX}${date}-${suffix}.md`);
+    return joinPath(this.paths.agentDir, `${AUTO_FILE_PREFIX}${date}-${suffix}.md`);
   }
 
   private async readGcTimestamp(): Promise<string | null> {
-    try {
-      const raw = await readFile(this.paths.memoryGcFile, "utf8");
-      return raw.trim() || null;
-    } catch {
-      return null;
-    }
+    const raw = await readText(this.paths.memoryGcFile);
+    return raw.trim() || null;
   }
 
   private async readCompactionState(): Promise<CompactionState> {
+    const raw = await readText(this.paths.compactionStateFile);
+    if (!raw.trim()) return { processed: [] };
     try {
-      const raw = await readFile(this.paths.compactionStateFile, "utf8");
       return JSON.parse(raw) as CompactionState;
     } catch {
       return { processed: [] };

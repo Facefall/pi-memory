@@ -1,6 +1,7 @@
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { nowMs } from "../../utils/time.js";
 import type { LlmClient } from "./types.js";
 import { extractTextFromResponse } from "./extractText.js";
 import { parseModelSpec } from "./modelSpec.js";
@@ -20,6 +21,20 @@ async function resolveModelAuth(ctx: ExtensionContext, provider: string, modelId
   };
 }
 
+export async function tryCreatePiLlmClient(
+  ctx: ExtensionContext,
+  modelSpec?: string,
+): Promise<LlmClient | null> {
+  const { provider, modelId } = parseModelSpec(modelSpec);
+  const model = ctx.modelRegistry.find(provider, modelId);
+  if (!model) return null;
+
+  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+  if (!auth.ok || !auth.apiKey) return null;
+
+  return createPiLlmClient(ctx, modelSpec);
+}
+
 export function createPiLlmClient(ctx: ExtensionContext, modelSpec?: string): LlmClient {
   const { provider, modelId } = parseModelSpec(modelSpec);
 
@@ -37,7 +52,7 @@ export function createPiLlmClient(ctx: ExtensionContext, modelSpec?: string): Ll
             {
               role: "user",
               content: [{ type: "text", text: prompt }],
-              timestamp: Date.now(),
+              timestamp: nowMs(),
             },
           ],
         },
