@@ -6,6 +6,7 @@ import { createLlmClient } from "./adapters/llm/index.js";
 import { runConsolidateJob } from "./consolidate/runJob.js";
 import { createCliLog } from "./cli/log.js";
 import { CLI_HELP, parseCliArgs } from "./cli/parseArgs.js";
+import { runInitCommand } from "./cli/init.js";
 import { runStatusCommand } from "./cli/status.js";
 import { theme } from "./cli/theme.js";
 import { createMemoryStore } from "./store/index.js";
@@ -22,7 +23,14 @@ async function main(): Promise<number> {
     return parsed.error ? 1 : 0;
   }
 
-  const agentDir = resolveAgentDirFromEnv(parsed.options.agentDir);
+  const agentDir = resolveAgentDirFromEnv(
+    "options" in parsed ? parsed.options.agentDir : undefined,
+  );
+
+  if (parsed.command === "init") {
+    const log = createCliLog({ verbose: true, debug: parsed.options.verbose });
+    return runInitCommand(agentDir, log);
+  }
 
   if (parsed.command === "status") {
     const log = createCliLog({ verbose: true, debug: parsed.options.verbose });

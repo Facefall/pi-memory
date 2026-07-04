@@ -1,5 +1,6 @@
+export { initializeMemoryWorkspace, type InitMemoryWorkspaceResult } from "./init/workspace.js";
 export { loadEnv } from "./config/loadEnv.js";
-export { resolveAgentDirFromEnv } from "./config/agentDir.js";
+export { resolveAgentDirFromEnv, resolveMemoryAgentDir, type ResolveMemoryAgentDirOptions } from "./config/agentDir.js";
 export { readPiMemoryEnv, resolveEmbedDim, type PiMemoryEnv } from "./config/env.js";
 export { runConsolidateJob, type RunConsolidateJobResult } from "./consolidate/runJob.js";
 export * from "./constants/index.js";

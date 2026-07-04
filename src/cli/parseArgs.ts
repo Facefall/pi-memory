@@ -1,4 +1,4 @@
-export type CliCommand = "consolidate" | "status" | "help";
+export type CliCommand = "consolidate" | "init" | "status" | "help";
 
 export type CommonCliOptions = {
   agentDir?: string;
@@ -12,9 +12,12 @@ export type ConsolidateCliOptions = CommonCliOptions & {
 
 export type StatusCliOptions = CommonCliOptions;
 
+export type InitCliOptions = CommonCliOptions;
+
 export type ParsedCli =
   | { command: "help"; error?: string }
   | { command: "consolidate"; options: ConsolidateCliOptions }
+  | { command: "init"; options: InitCliOptions }
   | { command: "status"; options: StatusCliOptions };
 
 function parseCommonFlags(
@@ -61,6 +64,12 @@ export function parseCliArgs(argv: string[]): ParsedCli {
     return { command: "status", options: parsed };
   }
 
+  if (command === "init") {
+    const parsed = parseCommonFlags(rest, { verbose: false });
+    if ("command" in parsed) return parsed;
+    return { command: "init", options: parsed };
+  }
+
   if (command !== "consolidate") {
     return { command: "help", error: `Unknown command: ${command}` };
   }
@@ -101,15 +110,17 @@ export function parseCliArgs(argv: string[]): ParsedCli {
 export const CLI_HELP = `pi-memory — standalone tools for Pi local memory
 
 Usage:
+  pi-memory init [options]
   pi-memory status [options]
   pi-memory consolidate [options]
 
 Commands:
+  init                Create MEMORY.md from template when missing or empty
   status              Print MEMORY.md, sidecar, and vector index diagnostics
   consolidate         Run consolidate job (dedupe + optional reindex)
 
 Options:
-  --agent-dir PATH    Agent directory (default: PI_MEMORY_AGENT_DIR or ~/.pi/agent)
+  --agent-dir PATH    Memory data directory (overrides PI_MEMORY_AGENT_DIR)
   --verbose, -v       Extra stderr output (TTY colors when supported)
 
 Consolidate-only:
@@ -118,11 +129,12 @@ Consolidate-only:
 
 Environment:
   PI_MEMORY_ENV_FILE   Explicit .env path
-  PI_MEMORY_AGENT_DIR  Default agent directory
+  PI_MEMORY_AGENT_DIR  Memory data root; default ~/.pi/pi-memory-data
   PI_MEMORY_DEBUG=1    Debug stderr logs (extension preflight + CLI)
   NO_COLOR             Disable chalk colors
 
 Examples:
+  pi-memory init
   pi-memory status
   pi-memory consolidate --cron
   pi-memory consolidate --force --verbose
