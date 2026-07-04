@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ping, query, reindex } from "../src/sidecar/client.js";
+import { fetchIndexStats, ping, query, reindex } from "../src/sidecar/client.js";
 import { resolveSidecarEntry } from "../src/sidecar/paths.js";
 import { ensureSidecarRunning, stopSidecar } from "../src/sidecar/sidecarManager.js";
 
@@ -46,6 +46,14 @@ describe("sidecar IPC", () => {
       ]);
       expect(reindexRes.type).toBe("reindex_ok");
       expect(reindexRes.indexed).toBe(1);
+
+      const statsResult = await fetchIndexStats(socketPath);
+      expect("stats" in statsResult).toBe(true);
+      if ("stats" in statsResult) {
+        expect(statsResult.stats.chunk_count).toBe(1);
+        expect(statsResult.stats.index_generation).toBeGreaterThan(0);
+        expect(statsResult.stats.embedding_provider).toBeTruthy();
+      }
 
       const queryRes = await query(socketPath, "Always run tests before committing");
       expect(queryRes.type).toBe("result");

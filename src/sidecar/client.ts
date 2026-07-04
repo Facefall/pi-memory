@@ -8,7 +8,7 @@ import {
   SIDECAR_REINDEX_TIMEOUT_MS,
 } from "../constants/timing.js";
 import { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "../ipc/jsonlFramer.js";
-import { isErrorResponse, type IndexDocument, type SidecarResponse } from "./protocol.js";
+import { isErrorResponse, type IndexDocument, type IndexStats, type SidecarResponse } from "./protocol.js";
 
 export function sidecarRequest<T extends SidecarResponse>(
   socketPath: string,
@@ -65,6 +65,24 @@ export async function ping(socketPath: string): Promise<boolean> {
     return res.type === "pong";
   } catch {
     return false;
+  }
+}
+
+export async function fetchIndexStats(
+  socketPath: string,
+): Promise<{ stats: IndexStats } | { error: string }> {
+  try {
+    const res = await sidecarRequest<Extract<SidecarResponse, { type: "stats_ok" }>>(
+      socketPath,
+      { type: "stats" },
+      SIDECAR_PING_TIMEOUT_MS,
+    );
+    if (res.type !== "stats_ok") return { error: "unexpected sidecar response" };
+    const { type: _type, ...stats } = res;
+    return { stats };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { error: message };
   }
 }
 

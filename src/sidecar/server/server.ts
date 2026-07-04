@@ -8,6 +8,7 @@ import { cleanupSocketFiles, removeSocketFile, secureSocketPath } from "../../ut
 import type { SidecarRequest, SidecarResponse } from "../protocol.js";
 import { handleQuery } from "./query.js";
 import { handleReindex } from "./reindex.js";
+import { handleStats } from "./stats.js";
 
 export type SidecarServerOpts = {
   socketPath: string;
@@ -35,6 +36,9 @@ async function dispatchFrame(
   switch (frame.type) {
     case "ping":
       writeResponse(socket, { type: "pong" });
+      return;
+    case "stats":
+      writeResponse(socket, handleStats({ dbPath: ctx.dbPath }));
       return;
     case "query":
       writeResponse(socket, await handleQuery(frame.request_id, frame.query, { dbPath: ctx.dbPath }));
