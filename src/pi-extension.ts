@@ -195,7 +195,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
         store: memoryStore,
         llm: llmClient,
         force: forceHelper,
-        timeoutMs: env.preflightTimeoutMs,
+        budgetMs: env.preflightBudgetMs,
         signal: ctx.signal,
         onProgress: workingUi?.update,
       });
@@ -238,7 +238,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
           store: memoryStore,
           llm: llmClient,
           force: userTurnCount === 1,
-          timeoutMs: env.preflightTimeoutMs,
+          budgetMs: env.preflightBudgetMs,
           signal: ctx.signal,
         });
         privateContext = mergePrivateMemoryBlocks(

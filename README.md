@@ -7,7 +7,7 @@ Cross-session episodic memory for the [Pi coding agent](https://pi.dev): **MEMOR
 | Layer | Role |
 |-------|------|
 | **Ground Truth** | `MEMORY.md` + `auto-*.md` overflow files |
-| **Vector Index** | `memory.vec.sqlite` (derived; better-sqlite3 + cosine scan + MMR) |
+| **Vector Index** | `memory.vec.sqlite` (derived; cosine scan + MMR; default top-3, min relevance 0.4) |
 | **Sidecar** | Separate Node process over UDS JSONL (`query`, `reindex`, `ping`) |
 | **Preflight** | QueryIntent → Sidecar → Fallback to MEMORY.md → silent empty inject |
 
@@ -19,7 +19,7 @@ Cross-session episodic memory for the [Pi coding agent](https://pi.dev): **MEMOR
 
 **Diagnostics:** **`/memory-status`** in session, or **`pi-memory status`** on the CLI.
 
-**Shutdown Queue** — `session_shutdown` appends metadata to `.memory_shutdown_queue.jsonl` (offline worker reserved).
+**Shutdown Queue** — `session_shutdown` appends metadata to `.memory_shutdown_queue.jsonl`; **`pi-memory maintenance`** (or `drain-shutdown-queue`) ingests missed facts offline.
 
 ### Data directory
 
@@ -72,7 +72,7 @@ pnpm build
 | `PI_MEMORY_AGENT_DIR` | Memory data root (see [Data directory](#data-directory)) |
 | `PI_MEMORY_EMBEDDER` | `hash` (default, offline) \| `ollama` \| `openai` |
 | `PI_MEMORY_HELPER_MODEL` | Helper LLM for QueryIntent + consolidate |
-| `PI_MEMORY_PREFLIGHT_TIMEOUT_MS` | Preflight budget (default 800) |
+| `PI_MEMORY_PREFLIGHT_BUDGET_MS` | Preflight shared budget (default 800ms: ~240 intent + ~560 sidecar) |
 | `PI_MEMORY_REINDEX_DEBOUNCE_MS` | Debounced reindex after writes |
 | `PI_MEMORY_DEBUG` | `1` enables debug stderr logs (preflight timings) |
 
@@ -83,10 +83,12 @@ See [`.env.example`](./.env.example) for full list.
 ```bash
 pi-memory init
 pi-memory status
-pi-memory consolidate --cron
+pi-memory maintenance --cron --verbose
 pi-memory consolidate --force --verbose
+pi-memory drain-shutdown-queue --verbose
 ```
 
+`maintenance` runs **consolidate → drain-shutdown-queue** in one cron window (recommended for OS schedulers).  
 `status` prints MEMORY.md, sidecar, and vector index diagnostics (colored on TTY stderr).  
 Set `PI_MEMORY_DEBUG=1` for preflight timing logs during agent sessions.
 

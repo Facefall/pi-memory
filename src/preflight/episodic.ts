@@ -1,4 +1,4 @@
-import { DEFAULT_PREFLIGHT_TIMEOUT_MS, PREFLIGHT_INTENT_BUDGET_MS } from "../constants/timing.js";
+import { resolvePreflightBudget } from "../config/preflightBudget.js";
 import type { LlmClient } from "../adapters/llm/types.js";
 import { debugMemory } from "../utils/debugLog.js";
 import { nowMs, remainingMs } from "../utils/time.js";
@@ -21,7 +21,7 @@ export type EpisodicPreflightOptions = {
   store: MemoryStore;
   llm?: LlmClient | null;
   force?: boolean;
-  timeoutMs?: number;
+  budgetMs?: number;
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
 };
@@ -82,11 +82,11 @@ export async function runEpisodicPreflight(
     }
 
     options.onProgress?.("Searching memory...");
-    const totalBudget = options.timeoutMs ?? DEFAULT_PREFLIGHT_TIMEOUT_MS;
-    const deadline = nowMs() + totalBudget;
+    const budget = resolvePreflightBudget(options.budgetMs);
+    const deadline = nowMs() + budget.totalMs;
 
     const intentStartedAt = nowMs();
-    const intentBudget = Math.min(PREFLIGHT_INTENT_BUDGET_MS, remainingMs(deadline));
+    const intentBudget = Math.min(budget.intentMs, remainingMs(deadline));
     let intent;
     try {
       intent = await withTimeout(
@@ -117,7 +117,7 @@ export async function runEpisodicPreflight(
       privateContext = renderSidecarPrivateMemory(retrievalQuery, cached);
     } else {
       const sidecarStartedAt = nowMs();
-      const queryBudget = remainingMs(deadline);
+      const queryBudget = Math.min(budget.sidecarMs, remainingMs(deadline));
       try {
         const result = await withTimeout(
           query(options.socketPath, retrievalQuery, queryBudget),

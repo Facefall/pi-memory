@@ -4,9 +4,15 @@ export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 export const DEFAULT_LLM_COMPAT_TIMEOUT_MS = 120_000;
 
-/** Preflight episodic retrieval. */
-export const DEFAULT_PREFLIGHT_TIMEOUT_MS = 800;
-export const PREFLIGHT_INTENT_BUDGET_MS = 200;
+/** Preflight episodic retrieval (shared deadline for intent + sidecar). */
+export const DEFAULT_PREFLIGHT_BUDGET_MS = 800;
+export const MIN_PREFLIGHT_BUDGET_MS = 250;
+export const MAX_PREFLIGHT_BUDGET_MS = 1_500;
+/** Minimum time reserved for sidecar embed + scan after intent extraction. */
+export const MIN_PREFLIGHT_SIDECAR_RESERVE_MS = 200;
+
+/** @deprecated Use DEFAULT_PREFLIGHT_BUDGET_MS */
+export const DEFAULT_PREFLIGHT_TIMEOUT_MS = DEFAULT_PREFLIGHT_BUDGET_MS;
 
 /** Sidecar query cache (extension process). */
 export const QUERY_CACHE_MAX_ENTRIES = 500;

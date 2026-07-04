@@ -14,9 +14,10 @@ import {
 import {
   DEFAULT_CONSOLIDATE_DEBOUNCE_MS,
   DEFAULT_HTTP_TIMEOUT_MS,
-  DEFAULT_PREFLIGHT_TIMEOUT_MS,
+  DEFAULT_PREFLIGHT_BUDGET_MS,
   DEFAULT_REINDEX_DEBOUNCE_MS,
 } from "../constants/timing.js";
+import { resolvePreflightBudget } from "./preflightBudget.js";
 
 export type PiMemoryEnv = {
   embedder: EmbedderProvider;
@@ -33,7 +34,7 @@ export type PiMemoryEnv = {
   openaiCompatApiKey?: string;
   embedDimOverride?: number;
   httpTimeoutMs: number;
-  preflightTimeoutMs: number;
+  preflightBudgetMs: number;
   reindexDebounceMs: number;
   consolidateDebounceMs: number;
   agentDir?: string;
@@ -66,10 +67,14 @@ export function readPiMemoryEnv(env: NodeJS.ProcessEnv = process.env): PiMemoryE
     openaiCompatApiKey: env[ENV_KEYS.OPENAI_COMPAT_API_KEY]?.trim() || undefined,
     embedDimOverride: Number.isFinite(embedDimOverride) ? embedDimOverride : undefined,
     httpTimeoutMs: Number.parseInt(env[ENV_KEYS.HTTP_TIMEOUT_MS] ?? String(DEFAULT_HTTP_TIMEOUT_MS), 10),
-    preflightTimeoutMs: Number.parseInt(
-      env[ENV_KEYS.PREFLIGHT_TIMEOUT_MS] ?? String(DEFAULT_PREFLIGHT_TIMEOUT_MS),
-      10,
-    ),
+    preflightBudgetMs: resolvePreflightBudget(
+      Number.parseInt(
+        env[ENV_KEYS.PREFLIGHT_BUDGET_MS] ??
+          env[ENV_KEYS.PREFLIGHT_TIMEOUT_MS] ??
+          String(DEFAULT_PREFLIGHT_BUDGET_MS),
+        10,
+      ),
+    ).totalMs,
     reindexDebounceMs: Number.parseInt(
       env[ENV_KEYS.REINDEX_DEBOUNCE_MS] ?? String(DEFAULT_REINDEX_DEBOUNCE_MS),
       10,
