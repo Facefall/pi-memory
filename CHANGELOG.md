@@ -1,5 +1,11 @@
 # @chendpoc/pi-memory
 
+## 0.2.4
+
+### Patch Changes
+
+- Add `pi.image` gallery metadata for the [Pi package catalog](https://pi.dev/packages/@chendpoc/pi-memory) preview.
+
 ## 0.2.3
 
 ### Patch Changes
