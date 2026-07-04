@@ -2,12 +2,15 @@ import compact from "lodash/compact.js";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 
+import { readPreflightRuntimeConfig } from "../config/preflight.js";
 import {
+  DEFAULT_INTENT_RETRIES,
   MEMORY_CUE_RE,
   PREFLIGHT_EXTRACT_MIN_LENGTH,
   PREFLIGHT_SKIP_MIN_LENGTH,
 } from "../constants/preflight.js";
 import type { LlmClient } from "../adapters/llm/types.js";
+import { queryIntentCache } from "./intentCache.js";
 
 /** Structured intent from helper LLM — simpler than crafting a search query directly. */
 export const QueryIntentSchema = Type.Object(
@@ -35,17 +38,17 @@ Use raw_query when the whole message should be searched verbatim.
 User message:
 `;
 
-export function shouldRunEpisodicPreflight(query: string, force = false): boolean {
+export function shouldRunEpisodicPreflight(query: string, forceEpisodic = false): boolean {
   const trimmed = query.trim();
   if (!trimmed) return false;
-  if (force) return true;
+  if (forceEpisodic) return true;
   if (trimmed.startsWith("/")) return false;
   if (trimmed.length < PREFLIGHT_SKIP_MIN_LENGTH && !MEMORY_CUE_RE.test(trimmed)) return false;
   return MEMORY_CUE_RE.test(trimmed) || trimmed.length >= PREFLIGHT_EXTRACT_MIN_LENGTH;
 }
 
-export function shouldExtractIntent(query: string, force = false): boolean {
-  if (force) return true;
+export function shouldExtractIntent(query: string, forceIntent = false): boolean {
+  if (forceIntent) return true;
   if (query.trim().length >= PREFLIGHT_EXTRACT_MIN_LENGTH) return true;
   return MEMORY_CUE_RE.test(query);
 }
@@ -69,24 +72,55 @@ function extractJsonObject(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+export type ExtractQueryIntentOptions = {
+  forceIntent?: boolean;
+  signal?: AbortSignal;
+  sessionId?: string;
+  intentCache?: boolean;
+  intentRetries?: number;
+};
+
+export type ExtractQueryIntentResult = {
+  intent: QueryIntent;
+  skipped: boolean;
+  cacheHit: boolean;
+};
+
 export async function extractQueryIntent(
   userInput: string,
   llm: LlmClient | null,
-  options: { force?: boolean; signal?: AbortSignal } = {},
-): Promise<QueryIntent> {
+  options: ExtractQueryIntentOptions = {},
+): Promise<ExtractQueryIntentResult> {
   const fallback: QueryIntent = { raw_query: userInput.trim() };
-  if (!llm || !shouldExtractIntent(userInput, options.force)) {
-    return fallback;
-  }
+  const runtime = readPreflightRuntimeConfig();
+  const useCache = options.intentCache ?? runtime.intentCache;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const raw = await llm.complete(`${INTENT_PROMPT}${userInput}`, options.signal);
-      return parseQueryIntent(extractJsonObject(raw));
-    } catch {
-      // one retry, then fallback
+  if (useCache && options.sessionId) {
+    const cached = queryIntentCache.get(options.sessionId, userInput);
+    if (cached) {
+      return { intent: cached, skipped: false, cacheHit: true };
     }
   }
 
-  return fallback;
+  if (!llm || !shouldExtractIntent(userInput, options.forceIntent)) {
+    return { intent: fallback, skipped: true, cacheHit: false };
+  }
+
+  const retries = options.intentRetries ?? runtime.intentRetries ?? DEFAULT_INTENT_RETRIES;
+  const maxAttempts = Math.max(1, retries + 1);
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const raw = await llm.complete(`${INTENT_PROMPT}${userInput}`, options.signal);
+      const intent = parseQueryIntent(extractJsonObject(raw));
+      if (useCache && options.sessionId) {
+        queryIntentCache.set(options.sessionId, userInput, intent);
+      }
+      return { intent, skipped: false, cacheHit: false };
+    } catch {
+      // retry or fallback
+    }
+  }
+
+  return { intent: fallback, skipped: false, cacheHit: false };
 }

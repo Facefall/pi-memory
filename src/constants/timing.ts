@@ -39,6 +39,8 @@ export const SIDECAR_FORCE_KILL_DELAY_MS = 5_000;
 export const SIDECAR_PING_TIMEOUT_MS = 1_000;
 export const SIDECAR_QUERY_TIMEOUT_MS = 3_000;
 export const SIDECAR_REINDEX_TIMEOUT_MS = 10_000;
+/** Warm start dummy query (session_start; not counted against Preflight budget). */
+export const SIDECAR_WARMUP_QUERY_TIMEOUT_MS = 500;
 
 /** proper-lockfile on MEMORY.md. */
 export const MEMORY_LOCK_RETRIES = 5;

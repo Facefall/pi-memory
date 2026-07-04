@@ -1,3 +1,4 @@
+import { readPreflightRuntimeConfig } from "../config/preflight.js";
 import { resolvePreflightBudget } from "../config/preflightBudget.js";
 import type { LlmClient } from "../adapters/llm/types.js";
 import { debugMemory } from "../utils/debugLog.js";
@@ -20,7 +21,13 @@ export type EpisodicPreflightOptions = {
   agentDir: string;
   store: MemoryStore;
   llm?: LlmClient | null;
+  /** Force episodic gate (first turn); does not force helper LLM. */
+  forceEpisodic?: boolean;
+  /** Force helper LLM intent extraction. */
+  forceIntent?: boolean;
+  /** @deprecated Use forceEpisodic */
   force?: boolean;
+  sessionId?: string;
   budgetMs?: number;
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
@@ -67,16 +74,23 @@ async function withTimeout<T>(
 }
 
 /**
- * Fail-silent episodic preflight: QueryIntent (Zod) → buildRetrievalQuery → sidecar.query → fallback.
+ * Fail-silent episodic preflight: QueryIntent (optional) → buildRetrievalQuery → sidecar.query → fallback.
  */
 export async function runEpisodicPreflight(
   userInput: string,
   options: EpisodicPreflightOptions,
 ): Promise<EpisodicPreflightResult | null> {
   const startedAt = nowMs();
+  const forceEpisodic = options.forceEpisodic ?? options.force ?? false;
+  const runtime = readPreflightRuntimeConfig();
 
   try {
-    if (!shouldRunEpisodicPreflight(userInput, options.force)) {
+    if (await options.store.isEmpty()) {
+      debugMemory("preflight", "skipped", { reason: "empty" });
+      return null;
+    }
+
+    if (!shouldRunEpisodicPreflight(userInput, forceEpisodic)) {
       debugMemory("preflight", "skipped", { reason: "gate" });
       return null;
     }
@@ -88,15 +102,23 @@ export async function runEpisodicPreflight(
     const intentStartedAt = nowMs();
     const intentBudget = Math.min(budget.intentMs, remainingMs(deadline));
     let intent;
+    let intentSkipped = false;
+    let intentCacheHit = false;
+
     try {
-      intent = await withTimeout(
+      const extracted = await withTimeout(
         extractQueryIntent(userInput, options.llm ?? null, {
-          force: options.force,
+          forceIntent: options.forceIntent,
           signal: options.signal,
+          sessionId: options.sessionId,
+          intentCache: runtime.intentCache,
         }),
         intentBudget,
         options.signal,
       );
+      intent = extracted.intent;
+      intentSkipped = extracted.skipped;
+      intentCacheHit = extracted.cacheHit;
     } catch {
       intent = { raw_query: userInput.trim() };
     }
@@ -143,6 +165,8 @@ export async function runEpisodicPreflight(
 
     debugMemory("preflight", "recall", {
       intent_ms: intentMs,
+      intent_skipped: intentSkipped,
+      intent_cache_hit: intentCacheHit,
       sidecar_ms: sidecarMs,
       total_ms: nowMs() - startedAt,
       cache_hit: cacheHit,

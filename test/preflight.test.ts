@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { resetQueryIntentCacheForTests } from "../src/preflight/intentCache.js";
 import {
   buildRetrievalQuery,
+  extractQueryIntent,
   parseQueryIntent,
   shouldExtractIntent,
   shouldRunEpisodicPreflight,
@@ -59,7 +61,30 @@ describe("preflight gates", () => {
     expect(shouldRunEpisodicPreflight("remember what we decided last time")).toBe(true);
   });
 
-  it("forces intent extraction on first turn", () => {
+  it("forceEpisodic runs episodic gate but does not imply forceIntent", () => {
+    expect(shouldRunEpisodicPreflight("hello", true)).toBe(true);
+    expect(shouldExtractIntent("hello", false)).toBe(false);
+  });
+
+  it("forceIntent still forces helper LLM extraction", () => {
     expect(shouldExtractIntent("fix typo", true)).toBe(true);
+  });
+});
+
+describe("extractQueryIntent", () => {
+  it("reuses cached intent for repeated input in the same session", async () => {
+    resetQueryIntentCacheForTests();
+    const llm = { complete: vi.fn().mockResolvedValue('{"what":"Vitest"}') };
+
+    const first = await extractQueryIntent("remember our testing framework choice", llm, {
+      sessionId: "session-1",
+    });
+    const second = await extractQueryIntent("remember our testing framework choice", llm, {
+      sessionId: "session-1",
+    });
+
+    expect(first.cacheHit).toBe(false);
+    expect(second.cacheHit).toBe(true);
+    expect(llm.complete).toHaveBeenCalledTimes(1);
   });
 });

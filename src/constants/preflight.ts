@@ -11,3 +11,12 @@ export const MEMORY_CUE_RE =
 
 export const PREFLIGHT_SKIP_MIN_LENGTH = 12;
 export const PREFLIGHT_EXTRACT_MIN_LENGTH = 24;
+
+/** Helper LLM retries after the first attempt (0 = single try). */
+export const DEFAULT_INTENT_RETRIES = 0;
+export const MAX_INTENT_RETRIES = 3;
+
+/** Sidecar warm start + intent LRU defaults. */
+export const DEFAULT_WARM_SIDECAR_ENABLED = true;
+export const DEFAULT_INTENT_CACHE_ENABLED = true;
+export const INTENT_CACHE_MAX_ENTRIES = 128;

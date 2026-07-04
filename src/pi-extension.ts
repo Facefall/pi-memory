@@ -4,10 +4,12 @@ import findLastIndex from "lodash/findLastIndex.js";
 
 import { createLlmClient, type LlmClient } from "./adapters/llm/index.js";
 import { loadEnv, readPiMemoryEnv, resolveMemoryAgentDir } from "./config/index.js";
+import { readPreflightRuntimeConfig } from "./config/preflight.js";
 import { createConsolidateScheduler, startConsolidateInterval, type ConsolidateScheduler } from "./consolidate/scheduler.js";
 import { registerCommands } from "./commands/index.js";
 import { registerCompactHandlers } from "./compact/register.js";
 import { runEpisodicPreflight } from "./preflight/episodic.js";
+import { queryIntentCache } from "./preflight/intentCache.js";
 import { mergePrivateMemoryBlocks, renderMemoryCapPrivateMemory } from "./preflight/render.js";
 import { isSubagentSession } from "./preflight/session.js";
 import { injectPrivateMemoryContext } from "./preflight/strip.js";
@@ -15,6 +17,7 @@ import { enqueueShutdownMetadata, readParentSession } from "./shutdown/enqueue.j
 import { resolveSidecarPaths } from "./sidecar/paths.js";
 import { formatTimestamp } from "./utils/time.js";
 import { createReindexScheduler, type ReindexScheduler } from "./sidecar/reindexBridge.js";
+import { warmSidecar } from "./sidecar/warmup.js";
 import { ensureSidecarRunning, stopSidecar } from "./sidecar/sidecarManager.js";
 import { MemoryStore } from "./store/memoryStore.js";
 
@@ -35,6 +38,7 @@ let sessionMemoryCap: string | null = null;
 let turnPreflight: TurnPreflight | null = null;
 let isFirstTurn = false;
 let isSubagent = false;
+let sessionId: string | null = null;
 
 function getUserMessageText(message: AgentMessage): string | null {
   if (message.role !== "user") return null;
@@ -69,6 +73,14 @@ async function bootstrapSidecar(): Promise<void> {
     socketPath: sidecarPaths.socketPath,
     dbPath: sidecarPaths.dbPath,
   });
+
+  if (readPreflightRuntimeConfig().warmSidecar) {
+    try {
+      await warmSidecar(sidecarPaths.socketPath);
+    } catch {
+      // warm is best-effort
+    }
+  }
 
   reindexScheduler ??= createReindexScheduler({
     sidecar: sidecarPaths,
@@ -117,6 +129,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
     isSubagent = isSubagentSession(ctx);
     isFirstTurn = true;
     turnPreflight = null;
+    sessionId = ctx.sessionManager.getSessionFile() ?? null;
 
     await refreshLlm(ctx, pi);
 
@@ -141,6 +154,10 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
       }).catch(() => {});
     }
 
+    if (sessionId) {
+      queryIntentCache.clearSession(sessionId);
+    }
+
     stopConsolidateInterval?.();
     stopConsolidateInterval = null;
     consolidateScheduler = null;
@@ -152,6 +169,7 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
     turnPreflight = null;
     isFirstTurn = false;
     isSubagent = false;
+    sessionId = null;
 
     try {
       await stopSidecar();
@@ -194,7 +212,8 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
         agentDir: memoryStore.agentDir,
         store: memoryStore,
         llm: llmClient,
-        force: forceHelper,
+        forceEpisodic: forceHelper,
+        sessionId: sessionId ?? undefined,
         budgetMs: env.preflightBudgetMs,
         signal: ctx.signal,
         onProgress: workingUi?.update,
@@ -237,7 +256,8 @@ export default function piMemoryExtension(pi: ExtensionAPI): void {
           agentDir: memoryStore.agentDir,
           store: memoryStore,
           llm: llmClient,
-          force: userTurnCount === 1,
+          forceEpisodic: userTurnCount === 1,
+          sessionId: sessionId ?? undefined,
           budgetMs: env.preflightBudgetMs,
           signal: ctx.signal,
         });
