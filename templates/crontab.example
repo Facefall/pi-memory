@@ -7,4 +7,4 @@
 # __NODE__ = which node
 # __CLI__  = path to pi-memory/dist/cli.js (after pnpm build)
 #
-0 3 * * * PI_MEMORY_ENV_FILE=$HOME/.pi/.env PI_MEMORY_AGENT_DIR=$HOME/.pi/agent __NODE__ __CLI__ consolidate --cron --verbose >> $HOME/.pi/logs/consolidate.log 2>&1
+0 3 * * * PI_MEMORY_ENV_FILE=$HOME/.pi/agent/pi-memory.env PI_MEMORY_AGENT_DIR=$HOME/.pi/pi-memory-data __NODE__ __CLI__ consolidate --cron --verbose >> $HOME/.pi/logs/consolidate.log 2>&1

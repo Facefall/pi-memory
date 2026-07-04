@@ -41,9 +41,9 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PI_MEMORY_ENV_FILE</key>
-    <string>__HOME__/.pi/.env</string>
+    <string>__HOME__/.pi/agent/pi-memory.env</string>
     <key>PI_MEMORY_AGENT_DIR</key>
-    <string>__HOME__/.pi/agent</string>
+    <string>__HOME__/.pi/pi-memory-data</string>
   </dict>
 </dict>
 </plist>

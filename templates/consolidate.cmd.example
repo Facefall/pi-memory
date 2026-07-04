@@ -8,6 +8,6 @@ REM
 REM Or point /TR directly at this script after editing paths below.
 
 set PI_MEMORY_ENV_FILE=%USERPROFILE%\.pi\.env
-set PI_MEMORY_AGENT_DIR=%USERPROFILE%\.pi\agent
+set PI_MEMORY_AGENT_DIR=%USERPROFILE%\.pi\pi-memory-data
 
 "__NODE__" "__CLI__" consolidate --cron --verbose >> "%USERPROFILE%\.pi\logs\consolidate.log" 2>> "%USERPROFILE%\.pi\logs\consolidate.err.log"

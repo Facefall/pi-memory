@@ -18,6 +18,13 @@ describe("parseCliArgs", () => {
     });
   });
 
+  it("parses init command", () => {
+    expect(parseCliArgs(["init", "--agent-dir", "/tmp/mem"])).toEqual({
+      command: "init",
+      options: { verbose: false, agentDir: "/tmp/mem" },
+    });
+  });
+
   it("parses --agent-dir", () => {
     expect(parseCliArgs(["consolidate", "--agent-dir", "~/.pi/agent"])).toEqual({
       command: "consolidate",
@@ -39,6 +46,8 @@ describe("resolveAgentDirFromEnv", () => {
   });
 
   it("reads PI_MEMORY_AGENT_DIR", () => {
-    expect(resolveAgentDirFromEnv(undefined, { PI_MEMORY_AGENT_DIR: "/data/agent" })).toBe("/data/agent");
+    expect(resolveAgentDirFromEnv(undefined, { PI_MEMORY_AGENT_DIR: "/data/agent" })).toBe(
+      "/data/agent",
+    );
   });
 });

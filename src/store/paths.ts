@@ -1,6 +1,5 @@
-import { join } from "node:path";
-
 import { expandHomePath } from "../utils/paths.js";
+import { joinPath } from "../utils/fs.js";
 import {
   AUTO_FILE_PREFIX,
   COMPACTION_STATE_FILE,
@@ -23,9 +22,9 @@ export function getAgentPaths(agentDir: string, memoryFileName = DEFAULT_MEMORY_
   const resolved = resolveAgentDir(agentDir);
   return {
     agentDir: resolved,
-    memoryFile: join(resolved, memoryFileName),
-    memoryGcFile: join(resolved, MEMORY_GC_FILE),
-    compactionStateFile: join(resolved, COMPACTION_STATE_FILE),
+    memoryFile: joinPath(resolved, memoryFileName),
+    memoryGcFile: joinPath(resolved, MEMORY_GC_FILE),
+    compactionStateFile: joinPath(resolved, COMPACTION_STATE_FILE),
   };
 }
 

@@ -1,8 +1,7 @@
-import { accessSync, constants } from "node:fs";
-import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SIDECAR_DB_FILE, SIDECAR_SOCKET_FILE } from "../constants/paths.js";
+import { canRead, joinPath, pathDirname } from "../utils/fs.js";
 
 export type SidecarPaths = {
   socketPath: string;
@@ -11,26 +10,21 @@ export type SidecarPaths = {
 
 export function resolveSidecarPaths(agentDir: string): SidecarPaths {
   return {
-    socketPath: join(agentDir, SIDECAR_SOCKET_FILE),
-    dbPath: join(agentDir, SIDECAR_DB_FILE),
+    socketPath: joinPath(agentDir, SIDECAR_SOCKET_FILE),
+    dbPath: joinPath(agentDir, SIDECAR_DB_FILE),
   };
 }
 
 /** Resolve compiled sidecar entry (dist/sidecar/server/process.js). */
 export function resolveSidecarEntry(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
+  const here = pathDirname(fileURLToPath(import.meta.url));
   const candidates = [
-    join(here, "server/process.js"),
-    join(here, "../../dist/sidecar/server/process.js"),
+    joinPath(here, "server/process.js"),
+    joinPath(here, "../../dist/sidecar/server/process.js"),
   ];
 
   for (const entry of candidates) {
-    try {
-      accessSync(entry, constants.R_OK);
-      return entry;
-    } catch {
-      // try next
-    }
+    if (canRead(entry)) return entry;
   }
 
   throw new Error("Sidecar entry not found; run `pnpm build` first");

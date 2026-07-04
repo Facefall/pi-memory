@@ -21,7 +21,7 @@
 #
 # Set env vars for the task (Task Scheduler → Properties → Environment):
 #   PI_MEMORY_ENV_FILE = %USERPROFILE%\.pi\.env
-#   PI_MEMORY_AGENT_DIR = %USERPROFILE%\.pi\agent
+#   PI_MEMORY_AGENT_DIR = %USERPROFILE%\.pi\pi-memory-data
 #
 # Manual test:
 #   schtasks /Run /TN "PiMemoryConsolidate"

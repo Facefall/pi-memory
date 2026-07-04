@@ -1,15 +1,13 @@
-import { join } from "node:path";
-
 import {
   LAUNCHD_LABEL,
   SCHEDULER_TEMPLATE_FILES,
   SCHTASKS_TASK_NAME,
 } from "../constants/paths.js";
 import {
-  defaultAgentDir,
   defaultConsolidateErrLogPath,
   defaultConsolidateLogPath,
-  defaultPiEnvFile,
+  defaultMemoryAgentDir,
+  defaultPiMemoryEnvFile,
   defaultPiLogsDir,
 } from "./paths.js";
 import { getPlatform, isMacOS, isWindows, type PiMemoryPlatform } from "./platform.js";
@@ -33,8 +31,8 @@ export type ConsolidateSchedulerPaths = {
 
 export function defaultConsolidateSchedulerPaths(): ConsolidateSchedulerPaths {
   return {
-    agentDir: defaultAgentDir(),
-    envFile: defaultPiEnvFile(),
+    agentDir: defaultMemoryAgentDir(),
+    envFile: defaultPiMemoryEnvFile(),
     logsDir: defaultPiLogsDir(),
     stdoutLog: defaultConsolidateLogPath(),
     stderrLog: defaultConsolidateErrLogPath(),

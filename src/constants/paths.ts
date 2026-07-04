@@ -1,8 +1,7 @@
-/** Pi user config root directory name under $HOME. */
-export const PI_CONFIG_DIR = ".pi";
-
-export const PI_AGENT_SUBDIR = "agent";
-export const PI_ENV_FILE = ".env";
+/** Default memory data root under ~/.pi/ (MEMORY.md, sidecar, vector DB). */
+export const PI_MEMORY_DATA_SUBDIR = "pi-memory-data";
+/** pi-memory config file under ~/.pi/agent/ (not a generic dotenv at ~/.pi root). */
+export const PI_MEMORY_ENV_FILE_NAME = "pi-memory.env";
 export const PI_LOGS_SUBDIR = "logs";
 
 /** Sidecar IPC + index files (under agent dir). */

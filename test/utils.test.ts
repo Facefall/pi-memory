@@ -5,16 +5,19 @@ import { describe, expect, it } from "vitest";
 import { SCHEDULER_TEMPLATE_FILES } from "../src/constants/index.js";
 import {
   buildConsolidateCliArgs,
-  defaultAgentDir,
+  defaultMemoryAgentDir,
   defaultPiConfigDir,
   expandHomePath,
+  getAgentDir,
   getConsolidateSchedulerKind,
   getConsolidateTemplateNames,
   getPlatform,
   isMacOS,
   isUnixLike,
   isWindows,
+  joinPath,
   mkdirOptions,
+  readText,
   secureDirMode,
   secureFileMode,
 } from "../src/utils/index.js";
@@ -51,7 +54,19 @@ describe("paths", () => {
 
   it("defaults pi config under home", () => {
     expect(defaultPiConfigDir()).toMatch(/\.pi$/);
-    expect(defaultAgentDir()).toMatch(/\.pi[\\/]agent$/);
+    expect(getAgentDir()).toMatch(/\.pi[\\/]agent$/);
+    expect(defaultMemoryAgentDir()).toMatch(/\.pi[\\/]pi-memory-data$/);
+  });
+});
+
+describe("fs", () => {
+  it("joinPath uses platform separators", () => {
+    expect(joinPath("a", "b", "c")).toContain("b");
+  });
+
+  it("readText returns empty string for missing files", async () => {
+    const content = await readText("/tmp/pi-memory-missing-file-test-404.md");
+    expect(content).toBe("");
   });
 });
 

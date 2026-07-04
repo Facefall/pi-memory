@@ -1,20 +1,22 @@
+import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
   CONSOLIDATE_ERR_LOG_FILE,
   CONSOLIDATE_LOG_FILE,
-  PI_AGENT_SUBDIR,
-  PI_CONFIG_DIR,
-  PI_ENV_FILE,
+  PI_MEMORY_DATA_SUBDIR,
+  PI_MEMORY_ENV_FILE_NAME,
   PI_LOGS_SUBDIR,
 } from "../constants/paths.js";
 import { SECURE_DIR_MODE, SECURE_FILE_MODE } from "../constants/security.js";
 import { isWindows } from "./platform.js";
 
+export { CONFIG_DIR_NAME, getAgentDir };
+
 /** Expand leading `~` or `~/` using the current user's home directory. */
-export function expandHomePath(inputPath: string): string {
-  const trimmed = inputPath.trim();
+export function expandHomePath(input: string): string {
+  const trimmed = input.trim();
   if (trimmed === "~") return homedir();
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
     return join(homedir(), trimmed.slice(2));
@@ -22,16 +24,19 @@ export function expandHomePath(inputPath: string): string {
   return trimmed;
 }
 
+/** Pi user config root (~/.pi). Uses Pi's CONFIG_DIR_NAME. */
 export function defaultPiConfigDir(): string {
-  return join(homedir(), PI_CONFIG_DIR);
+  return join(homedir(), CONFIG_DIR_NAME);
 }
 
-export function defaultAgentDir(): string {
-  return join(defaultPiConfigDir(), PI_AGENT_SUBDIR);
+/** Memory data root: ~/.pi/pi-memory-data */
+export function defaultMemoryAgentDir(): string {
+  return join(defaultPiConfigDir(), PI_MEMORY_DATA_SUBDIR);
 }
 
-export function defaultPiEnvFile(): string {
-  return join(defaultPiConfigDir(), PI_ENV_FILE);
+/** pi-memory config: ~/.pi/agent/pi-memory.env */
+export function defaultPiMemoryEnvFile(): string {
+  return join(getAgentDir(), PI_MEMORY_ENV_FILE_NAME);
 }
 
 export function defaultPiLogsDir(): string {
