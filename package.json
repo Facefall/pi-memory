@@ -1,6 +1,6 @@
 {
   "name": "@chendpoc/pi-memory",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Cross-session episodic memory for Pi agent — MEMORY.md ground truth, JSONL sidecar retrieval, and Preflight injection",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,7 +21,8 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.dist.json",
+    "prepare": "node ./scripts/prepare.mjs",
     "postinstall": "node ./scripts/postinstall.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -37,19 +38,13 @@
   },
   "files": [
     "dist",
-    "src/**/*.ts",
-    "!src/**/*.test.ts",
     "templates/MEMORY.md.example",
     "scripts/path-utils.mjs",
     "scripts/init-memory-workspace.mjs",
     "scripts/platform-fs.mjs",
     "scripts/postinstall.mjs",
-    "assets/pi-memory-logo.png",
-    "README.md",
-    "doc/README-zh.md",
-    "doc/ROADMAP.md",
-    "doc/ROADMAP-zh.md",
-    "UBIQUITOUS_LANGUAGE.md"
+    "scripts/prepare.mjs",
+    "README.md"
   ],
   "engines": {
     "node": ">=24.0.0 <25"
@@ -72,7 +67,7 @@
   "homepage": "https://github.com/chendpoc/pi-memory#readme",
   "pi": {
     "extensions": [
-      "./src/pi-extension.ts"
+      "./dist/pi-extension.js"
     ]
   },
   "peerDependencies": {

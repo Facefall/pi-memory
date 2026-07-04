@@ -61,10 +61,12 @@ pnpm test
 ```json
 {
   "pi": {
-    "extensions": ["./src/pi-extension.ts"]
+    "extensions": ["./dist/pi-extension.js"]
   }
 }
 ```
+
+发布的 npm 包自带编译后的 `dist/`；`pi install npm:@chendpoc/pi-memory` 会直接加载编译产物。
 
 ### 🌱 记忆工作区（自动初始化）
 

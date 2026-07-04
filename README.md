@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/pi-memory-logo.png" alt="pi-memory logo" width="720" />
+  <img src="https://raw.githubusercontent.com/chendpoc/pi-memory/main/assets/pi-memory-logo.png" alt="pi-memory logo" width="720" />
 </p>
 
 # @chendpoc/pi-memory
@@ -61,10 +61,12 @@ Enable the extension through Pi's extension loading mechanism. This package decl
 ```json
 {
   "pi": {
-    "extensions": ["./src/pi-extension.ts"]
+    "extensions": ["./dist/pi-extension.js"]
   }
 }
 ```
+
+Published npm packages ship precompiled `dist/`; `pi install npm:@chendpoc/pi-memory` loads the compiled extension entry directly.
 
 ### 🌱 Memory workspace (automatic)
 

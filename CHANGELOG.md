@@ -1,5 +1,13 @@
 # @chendpoc/pi-memory
 
+## 0.2.3
+
+### Patch Changes
+
+- Ship compiled extension only: `pi.extensions` → `./dist/pi-extension.js`; drop `src/**/*.ts` from npm tarball.
+- Add `tsconfig.dist.json` (no source maps / declaration maps) for publish builds; `prepare` skips rebuild when `dist/` is present.
+- Remove `assets/pi-memory-logo.png`, `doc/`, and `UBIQUITOUS_LANGUAGE.md` from npm `files` (README logo uses GitHub raw URL).
+
 ## 0.2.2
 
 ### Patch Changes
