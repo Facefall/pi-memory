@@ -4,7 +4,7 @@ import { readPiMemoryEnv, type PiMemoryEnv } from "../../config/env.js";
 import { isOllamaModelSpec, parseModelSpec } from "./modelSpec.js";
 import { createOllamaLlmClient, ollamaHealthCheck } from "./ollama.js";
 import { createOpenAICompatLlmClient, openaiCompatHealthCheck } from "./openai-compat.js";
-import { createPiLlmClient } from "./pi-ai.js";
+import { tryCreatePiLlmClient } from "./pi-ai.js";
 import { createStandaloneLlmClient } from "./standalone.js";
 import type { LlmClient } from "./types.js";
 
@@ -18,6 +18,11 @@ export type CreateLlmClientOptions = {
 export async function createLlmClient(options: CreateLlmClientOptions = {}): Promise<LlmClient | null> {
   const env = options.env ?? readPiMemoryEnv();
   const modelSpec = options.modelSpec ?? env.helperModel;
+
+  if (options.ctx) {
+    const fromRegistry = await tryCreatePiLlmClient(options.ctx, modelSpec);
+    if (fromRegistry) return fromRegistry;
+  }
 
   if (env.openaiCompatBaseUrl && env.openaiCompatModel) {
     const ok = await openaiCompatHealthCheck(env.openaiCompatBaseUrl);
@@ -47,15 +52,7 @@ export async function createLlmClient(options: CreateLlmClientOptions = {}): Pro
     try {
       return createStandaloneLlmClient(modelSpec, { apiKey: env.helperApiKey });
     } catch {
-      // fall through to pi-ai
-    }
-  }
-
-  if (options.ctx) {
-    try {
-      return createPiLlmClient(options.ctx, modelSpec);
-    } catch {
-      return null;
+      // fall through
     }
   }
 
