@@ -1,11 +1,10 @@
-import { existsSync } from "node:fs";
-
 import { readPiMemoryEnv, resolveEmbedDim } from "../config/env.js";
 import { ping } from "../sidecar/client.js";
 import { resolveSidecarPaths } from "../sidecar/paths.js";
 import { getVecStore } from "../sidecar/server/vec/store.js";
 import { createMemoryStore } from "../store/index.js";
 import type { MemoryStats } from "../store/types.js";
+import { pathExists } from "../utils/fs.js";
 
 import type { CliLog } from "./log.js";
 import { theme } from "./theme.js";
@@ -55,7 +54,7 @@ export async function gatherMemoryStatus(agentDir: string): Promise<MemoryStatus
     },
     vectorIndex: {
       dbPath: sidecar.dbPath,
-      exists: existsSync(sidecar.dbPath),
+      exists: pathExists(sidecar.dbPath),
     },
     embedder: {
       provider: env.embedder,

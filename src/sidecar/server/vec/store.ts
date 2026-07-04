@@ -1,10 +1,9 @@
 import { createRequire } from "node:module";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 
 import type { Embedder } from "../../../adapters/embed/types.js";
 import type { IndexDocument, MemoryEntry } from "../../protocol.js";
-import { CANDIDATE_POOL_MULTIPLIER, DEFAULT_TOP_K } from "./constants.js";
+import { ensureDirSync, pathDirname } from "../../../utils/fs.js";
+import { CANDIDATE_POOL_MULTIPLIER, DEFAULT_TOP_K } from "../../../constants/retrieval.js";
 import { getEmbedder } from "./embedder.js";
 import { cosineSimilarity, distanceToRelevance, mmrSelect, type ScoredCandidate } from "./mmr.js";
 
@@ -41,7 +40,7 @@ export class VecStore {
   private db: import("better-sqlite3").Database;
 
   constructor(dbPath: string) {
-    mkdirSync(dirname(dbPath), { recursive: true });
+    ensureDirSync(pathDirname(dbPath));
     const Database = require("better-sqlite3") as typeof import("better-sqlite3");
     this.db = new Database(dbPath);
     this.initSchema();

@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 import { formatMemoryStatusLines, gatherMemoryStatus } from "../cli/status.js";
+import { resolveMemoryAgentDir } from "../config/agentDir.js";
 
 export type MemoryStatusCommandDeps = {
   getAgentDir(): string | null;
@@ -9,7 +9,7 @@ export type MemoryStatusCommandDeps = {
 
 export function createMemoryStatusCommand(deps: MemoryStatusCommandDeps) {
   return async (_args: string | string[], ctx: ExtensionCommandContext): Promise<void> => {
-    const agentDir = deps.getAgentDir() ?? getAgentDir();
+    const agentDir = deps.getAgentDir() ?? resolveMemoryAgentDir();
 
     if (ctx.hasUI) {
       ctx.ui.setWorkingMessage("Checking memory…");

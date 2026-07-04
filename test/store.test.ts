@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createMemoryStore } from "../src/store/index.js";
-import { DEFAULT_MAX_LINES } from "../src/store/constants.js";
+import { DEFAULT_MAX_LINES } from "../src/constants/memory.js";
+import { countLines } from "../src/store/markdown/format.js";
+import { defaultMemoryTemplate } from "../src/store/markdown/template.js";
 
 describe("MemoryStore", () => {
   let tmpDir: string;
@@ -18,6 +20,9 @@ describe("MemoryStore", () => {
     const store = createMemoryStore({ agentDir: tmpDir });
 
     await store.ensureInitialized();
+    const raw = await store.readRaw();
+    expect(raw).toMatch(/^# Memory\n/);
+    expect(raw).toContain("## Preferences");
     expect(await store.isEmpty()).toBe(true);
 
     await store.appendUser({
@@ -72,7 +77,8 @@ describe("MemoryStore", () => {
 
   it("overflows to auto file when MEMORY.md exceeds line cap", async () => {
     tmpDir = mkdtempSync(join(tmpdir(), "pi-memory-store-"));
-    const store = createMemoryStore({ agentDir: tmpDir, maxLines: 8 });
+    const templateLines = countLines(defaultMemoryTemplate());
+    const store = createMemoryStore({ agentDir: tmpDir, maxLines: templateLines + 2 });
     await store.ensureInitialized();
 
     for (let i = 0; i < 6; i++) {
@@ -85,7 +91,7 @@ describe("MemoryStore", () => {
     }
 
     const stats = await store.getStats();
-    expect(stats.lineCount).toBeLessThanOrEqual(8 + 2);
+    expect(stats.lineCount).toBeLessThanOrEqual(templateLines + 3);
     expect(stats.overflowFileCount).toBeGreaterThan(0);
 
     const resolved = await store.listEntries();

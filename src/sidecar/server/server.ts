@@ -1,10 +1,9 @@
 import { createServer, type Server, type Socket } from "node:net";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { writeFileSync } from "node:fs";
 
 import { SIDECAR_PID_SUFFIX } from "../../constants/paths.js";
 import { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "../../ipc/jsonlFramer.js";
-import { mkdirOptions } from "../../utils/paths.js";
+import { ensureDirSync, pathDirname } from "../../utils/fs.js";
 import { cleanupSocketFiles, removeSocketFile, secureSocketPath } from "../../utils/socket.js";
 import type { SidecarRequest, SidecarResponse } from "../protocol.js";
 import { handleQuery } from "./query.js";
@@ -56,7 +55,7 @@ async function dispatchFrame(
 export function createSidecarServer(opts: SidecarServerOpts): SidecarServer {
   const pidPath = opts.socketPath + SIDECAR_PID_SUFFIX;
 
-  mkdirSync(dirname(opts.socketPath), mkdirOptions());
+  ensureDirSync(pathDirname(opts.socketPath));
   removeSocketFile(opts.socketPath);
 
   const server = createServer((socket) => {
