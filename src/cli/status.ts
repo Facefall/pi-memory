@@ -7,8 +7,42 @@ import { createMemoryStore } from "../store/index.js";
 import type { MemoryStats } from "../store/types.js";
 import { pathExists } from "../utils/fs.js";
 
+import type { Theme } from "@earendil-works/pi-coding-agent";
+
 import type { CliLog } from "./log.js";
 import { theme } from "./theme.js";
+
+export type StatusPalette = {
+  dim: (text: string) => string;
+  ok: (text: string) => string;
+  bad: (text: string) => string;
+  warn: (text: string) => string;
+};
+
+const plainPalette: StatusPalette = {
+  dim: (text) => text,
+  ok: (text) => text,
+  bad: (text) => text,
+  warn: (text) => text,
+};
+
+export function cliStatusPalette(): StatusPalette {
+  return {
+    dim: theme.dim,
+    ok: theme.ok,
+    bad: theme.bad,
+    warn: theme.warn,
+  };
+}
+
+export function piStatusPalette(theme: Theme): StatusPalette {
+  return {
+    dim: (text) => theme.fg("dim", text),
+    ok: (text) => theme.fg("success", text),
+    bad: (text) => theme.fg("error", text),
+    warn: (text) => theme.fg("warning", text),
+  };
+}
 
 export type MemoryStatusReport = {
   agentDir: string;
@@ -133,7 +167,7 @@ export async function gatherMemoryStatus(agentDir: string): Promise<MemoryStatus
 
 type MemoryStatusRow = {
   label: string;
-  value: (themed: boolean) => string;
+  value: () => string;
 };
 
 function formatVectorIndexLine(report: MemoryStatusReport): string {
@@ -147,27 +181,26 @@ function formatVectorIndexLine(report: MemoryStatusReport): string {
   return `gen=${generation} chunks=${chunkCount}`;
 }
 
-function formatIndexEmbedderLine(report: MemoryStatusReport, themed: boolean): string {
+function formatIndexEmbedderLine(report: MemoryStatusReport, palette: StatusPalette): string {
   const { embeddingProvider, embeddingModel, embeddingDim, chunkCount, readError } = report.vectorIndex;
   if (readError) {
-    return themed ? theme.dim("(unavailable)") : "(unavailable)";
+    return palette.dim("(unavailable)");
   }
   if (!embeddingProvider || !embeddingModel || embeddingDim === undefined) {
     if (chunkCount === 0) {
-      return themed ? theme.dim("(empty — reindex pending)") : "(empty — reindex pending)";
+      return palette.dim("(empty — reindex pending)");
     }
-    return themed ? theme.dim("(no embedding meta — run reindex)") : "(no embedding meta — run reindex)";
+    return palette.dim("(no embedding meta — run reindex)");
   }
 
   const label = `${embeddingProvider}/${embeddingModel} (${embeddingDim}d)`;
   if (embedderMatchesIndex(report)) {
     return label;
   }
-  const mismatch = `${label} ≠ configured`;
-  return themed ? theme.warn(mismatch) : mismatch;
+  return palette.warn(`${label} ≠ configured`);
 }
 
-function memoryStatusRows(report: MemoryStatusReport): MemoryStatusRow[] {
+function memoryStatusRows(report: MemoryStatusReport, palette: StatusPalette = plainPalette): MemoryStatusRow[] {
   const lastConsolidated = report.memory.lastConsolidatedAt ?? "(never)";
   const sidecarState = report.sidecar.running ? "running" : "not reachable";
   const sidecarDetail = `${sidecarState} (${report.sidecar.socketPath})`;
@@ -179,17 +212,14 @@ function memoryStatusRows(report: MemoryStatusReport): MemoryStatusRow[] {
     { label: "overflow files", value: () => String(report.memory.overflowFileCount) },
     {
       label: "last consolidate",
-      value: (themed) =>
-        themed && !report.memory.lastConsolidatedAt
-          ? theme.dim(lastConsolidated)
-          : lastConsolidated,
+      value: () =>
+        !report.memory.lastConsolidatedAt ? palette.dim(lastConsolidated) : lastConsolidated,
     },
     {
       label: "sidecar",
-      value: (themed) => {
-        if (!themed) return sidecarDetail;
-        const state = report.sidecar.running ? theme.ok(sidecarState) : theme.bad(sidecarState);
-        return `${state} ${theme.dim(`(${report.sidecar.socketPath})`)}`;
+      value: () => {
+        const state = report.sidecar.running ? palette.ok(sidecarState) : palette.bad(sidecarState);
+        return `${state} ${palette.dim(`(${report.sidecar.socketPath})`)}`;
       },
     },
   ];
@@ -197,23 +227,23 @@ function memoryStatusRows(report: MemoryStatusReport): MemoryStatusRow[] {
   if (!report.vectorIndex.exists) {
     rows.push({
       label: "vector index",
-      value: (themed) => (themed ? theme.dim("(missing — write MEMORY or start session)") : "(missing)"),
+      value: () => palette.dim("(missing — write MEMORY or start session)"),
     });
   } else {
     rows.push({
       label: "vector index",
-      value: (themed) => {
+      value: () => {
         const line = formatVectorIndexLine(report);
-        if (themed && report.vectorIndex.readError) return theme.bad(line);
-        if (themed && (report.vectorIndex.generation === undefined || report.vectorIndex.chunkCount === undefined)) {
-          return theme.dim(line);
+        if (report.vectorIndex.readError) return palette.bad(line);
+        if (report.vectorIndex.generation === undefined || report.vectorIndex.chunkCount === undefined) {
+          return palette.dim(line);
         }
         return line;
       },
     });
     rows.push({
       label: "index embedder",
-      value: (themed) => formatIndexEmbedderLine(report, themed),
+      value: () => formatIndexEmbedderLine(report, palette),
     });
   }
 
@@ -225,15 +255,53 @@ function memoryStatusRows(report: MemoryStatusReport): MemoryStatusRow[] {
   return rows;
 }
 
+export function formatMemoryStatusSummary(
+  report: MemoryStatusReport,
+  palette: StatusPalette,
+  accent: (text: string) => string,
+): string {
+  const parts = [
+    accent("pi-memory"),
+    palette.dim(`entries=${report.memory.entryCount}`),
+    report.sidecar.running ? palette.ok("sidecar up") : palette.bad("sidecar down"),
+  ];
+
+  if (!report.vectorIndex.exists) {
+    parts.push(palette.dim("no index"));
+  } else {
+    const vec = formatVectorIndexLine(report);
+    if (report.vectorIndex.readError) {
+      parts.push(palette.bad(vec));
+    } else if (report.vectorIndex.generation === undefined || report.vectorIndex.chunkCount === undefined) {
+      parts.push(palette.dim(vec));
+    } else {
+      parts.push(vec);
+    }
+  }
+
+  return parts.join(palette.dim(" · "));
+}
+
 export function formatMemoryStatusLines(report: MemoryStatusReport): string[] {
   return memoryStatusRows(report).map(
-    ({ label, value }) => `${label.padEnd(16)} ${value(false)}`,
+    ({ label, value }) => `${label.padEnd(16)} ${value()}`,
+  );
+}
+
+export function formatMemoryStatusTuiLines(
+  report: MemoryStatusReport,
+  palette: StatusPalette,
+  theme: Theme,
+): string[] {
+  return memoryStatusRows(report, palette).map(
+    ({ label, value }) => `${theme.fg("muted", label.padEnd(16))} ${value()}`,
   );
 }
 
 export function printMemoryStatus(report: MemoryStatusReport, log: CliLog): void {
-  for (const { label, value } of memoryStatusRows(report)) {
-    log.line(label, value(true));
+  const palette = cliStatusPalette();
+  for (const { label, value } of memoryStatusRows(report, palette)) {
+    log.line(label, value());
   }
 }
 

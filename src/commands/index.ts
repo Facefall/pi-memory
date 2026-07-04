@@ -14,7 +14,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   });
 
   pi.registerCommand("memory-status", {
-    description: "Show MEMORY.md, sidecar, and vector index diagnostics",
+    description: "Show MEMORY.md, sidecar, and vector index diagnostics (toggle expand/collapse; hide to dismiss)",
     handler: createMemoryStatusCommand(deps),
   });
 }
