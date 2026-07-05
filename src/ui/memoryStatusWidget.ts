@@ -1,13 +1,15 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import type { Component, TUI } from "@earendil-works/pi-tui";
+import type { Component } from "@earendil-works/pi-tui";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 
-import type { MemoryStatusReport } from "../cli/status.js";
 import {
+  MEMORY_STATUS_COLLAPSE_HINT,
+  MEMORY_STATUS_EXPAND_HINT,
   formatMemoryStatusSummary,
   formatMemoryStatusTuiLines,
   piStatusPalette,
-} from "../cli/status.js";
+  type MemoryStatusReport,
+} from "../status/index.js";
 
 export type MemoryStatusWidgetState = {
   report: MemoryStatusReport;
@@ -23,25 +25,14 @@ function formatHeader(theme: Theme, width: number): string {
 }
 
 export class MemoryStatusWidget implements Component {
-  private cachedWidth?: number;
-  private cachedLines?: string[];
-  private version = 0;
-  private cachedVersion = -1;
-
   constructor(
     private readonly theme: Theme,
-    private state: MemoryStatusWidgetState,
+    private readonly state: MemoryStatusWidgetState,
   ) {}
 
-  invalidate(): void {
-    this.cachedLines = undefined;
-  }
+  invalidate(): void {}
 
   render(width: number): string[] {
-    if (this.cachedLines && this.cachedWidth === width && this.cachedVersion === this.version) {
-      return this.cachedLines;
-    }
-
     const palette = piStatusPalette(this.theme);
     const lines: string[] = [];
 
@@ -49,30 +40,21 @@ export class MemoryStatusWidget implements Component {
       const summary = formatMemoryStatusSummary(this.state.report, palette, (text) =>
         this.theme.fg("accent", text),
       );
-      const hint = this.theme.fg("dim", " (/memory-status to expand)");
+      const hint = this.theme.fg("dim", MEMORY_STATUS_EXPAND_HINT);
       lines.push(truncateToWidth(`${summary}${hint}`, width));
     } else {
       lines.push(truncateToWidth(formatHeader(this.theme, width), width));
       for (const line of formatMemoryStatusTuiLines(this.state.report, palette, this.theme)) {
         lines.push(truncateToWidth(`  ${line}`, width));
       }
-      lines.push(
-        truncateToWidth(
-          this.theme.fg("dim", "  /memory-status to collapse · /memory-status hide to dismiss"),
-          width,
-        ),
-      );
+      lines.push(truncateToWidth(this.theme.fg("dim", MEMORY_STATUS_COLLAPSE_HINT), width));
     }
 
-    this.cachedLines = lines;
-    this.cachedWidth = width;
-    this.cachedVersion = this.version;
     return lines;
   }
 }
 
 export function createMemoryStatusWidget(
-  _tui: TUI,
   theme: Theme,
   state: MemoryStatusWidgetState,
 ): MemoryStatusWidget {

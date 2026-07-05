@@ -11,7 +11,7 @@ import {
   resetMemoryStatusWidgetState,
   setMemoryStatusWidgetStateForTest,
 } from "../src/commands/status.js";
-import { formatMemoryStatusLines, gatherMemoryStatus } from "../src/cli/status.js";
+import { formatMemoryStatusLines, gatherMemoryStatus } from "../src/status/index.js";
 import { createMemoryStore } from "../src/store/index.js";
 
 describe("parseMemoryStatusArgs", () => {

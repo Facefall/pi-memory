@@ -1,5 +1,7 @@
 import chalk from "chalk";
 
+import type { StatusPalette } from "../status/types.js";
+
 function colorEnabled(stream: NodeJS.WriteStream = process.stderr): boolean {
   return Boolean(stream.isTTY) && !process.env.NO_COLOR && process.env.FORCE_COLOR !== "0";
 }
@@ -24,3 +26,12 @@ export const theme = {
   ok: (text: string, stream?: NodeJS.WriteStream) => paint(chalk.green, text, stream),
   bad: (text: string, stream?: NodeJS.WriteStream) => paint(chalk.red, text, stream),
 };
+
+export function cliStatusPalette(): StatusPalette {
+  return {
+    dim: theme.dim,
+    ok: theme.ok,
+    bad: theme.bad,
+    warn: theme.warn,
+  };
+}

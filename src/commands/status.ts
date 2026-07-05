@@ -3,7 +3,7 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import {
   formatMemoryStatusLines,
   gatherMemoryStatus,
-} from "../cli/status.js";
+} from "../status/index.js";
 import { resolveMemoryAgentDir } from "../config/agentDir.js";
 import { createMemoryStatusWidget, type MemoryStatusWidgetState } from "../ui/memoryStatusWidget.js";
 
@@ -23,7 +23,7 @@ function renderMemoryStatusWidget(
   ctx: ExtensionCommandContext,
   state: MemoryStatusWidgetState,
 ): void {
-  ctx.ui.setWidget("pi-memory-status", (tui, theme) => createMemoryStatusWidget(tui, theme, state), {
+  ctx.ui.setWidget("pi-memory-status", (_tui, theme) => createMemoryStatusWidget(theme, state), {
     placement: "aboveEditor",
   });
 }
