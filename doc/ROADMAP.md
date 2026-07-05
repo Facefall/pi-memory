@@ -23,20 +23,27 @@ This roadmap tracks product direction for `@chendpoc/pi-memory`. The README stay
 
 ## P0: Trust And Safety
 
-- Secret and token redaction before memory writes.
+**Target: 0.3.x** · [GitHub milestone](https://github.com/chendpoc/pi-memory/milestone/1)
+
+- Secret and token redaction before memory writes (design: [`dev-doc/redaction-design.md`](../dev-doc/redaction-design.md)).
+- Module architecture refactor: dedupe shared logic, slim MemoryStore, unified ingest pipeline (plan: [`dev-doc/architecture-refactor-plan.md`](../dev-doc/architecture-refactor-plan.md)).
 - Prompt-injection guardrails for LLM-generated Memory Export.
-- Correction detector for explicit user corrections.
+- Correction detector for explicit user corrections (design: [`dev-doc/remember-correction-design.md`](../dev-doc/remember-correction-design.md) — scoped to the `/remember` path; **not implemented yet**).
 - Better diagnostics for skipped writes and fallback reasons.
 
 ## P1: Recall Quality
 
-- Hybrid lexical + vector recall for `MEMORY.md` entries.
-- Recall eval fixtures for common coding-agent questions.
-- Debug metrics split by intent, embed, scan, MMR, render.
-- Optional reranker after MMR when latency budget allows.
+**Target: 0.4.x** · [GitHub milestone](https://github.com/chendpoc/pi-memory/milestone/2)
+
+- Hybrid lexical + vector recall for `MEMORY.md` entries (planned: **SQLite FTS5** virtual table alongside existing `memory_chunks` embeddings, RRF merge inside the sidecar, then MMR; see [`dev-doc/fts5-hybrid-recall-design.md`](../dev-doc/fts5-hybrid-recall-design.md), tracked in [issue #6](https://github.com/chendpoc/pi-memory/issues/6)).
+- Recall eval fixtures for common coding-agent questions ([#7](https://github.com/chendpoc/pi-memory/issues/7)).
+- Debug metrics split by intent, embed, scan, MMR, render ([#8](https://github.com/chendpoc/pi-memory/issues/8)).
+- Optional reranker after MMR when latency budget allows ([#9](https://github.com/chendpoc/pi-memory/issues/9), nice-to-have).
 - Local embedding provider improvements beyond Ollama.
 
 ## P2: Memory Lifecycle
+
+**Target: 0.5.x** · [GitHub milestone](https://github.com/chendpoc/pi-memory/milestone/3)
 
 - Failure and tool-quirk categories.
 - Human-reviewable memory draft or diary before promotion.
@@ -45,6 +52,8 @@ This roadmap tracks product direction for `@chendpoc/pi-memory`. The README stay
 - Explicit stale fact handling instead of simple TODO pruning.
 
 ## P3: Product Surface
+
+**Target: 1.0** · [GitHub milestone](https://github.com/chendpoc/pi-memory/milestone/4)
 
 - Better TUI status panel.
 - Memory edit/review commands.
