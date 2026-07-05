@@ -437,7 +437,7 @@ The sidecar IPC test opens a Unix domain socket. If it fails with `listen EPERM`
 
 - [Chinese README](./doc/README-zh.md)
 - [Roadmap](./doc/ROADMAP.md)
-- [Architecture refactor plan](./dev-doc/architecture-refactor-plan.md)
+- [Launch kit](./doc/LAUNCH-KIT.md)
 - [UBIQUITOUS_LANGUAGE.md](./UBIQUITOUS_LANGUAGE.md) - domain glossary
 
 ## 📜 License
