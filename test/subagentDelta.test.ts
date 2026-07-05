@@ -4,7 +4,7 @@ import {
   filterCompactionDelta,
   shouldSkipSubagentCompactionIngest,
 } from "../src/compact/subagentDelta.js";
-import { isSubagentSession } from "../src/preflight/session.js";
+import { isSubagentSession } from "../src/utils/session/index.js";
 
 describe("isSubagentSession", () => {
   it("detects parentSession and parent_session", () => {

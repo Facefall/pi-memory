@@ -3,7 +3,7 @@ import { keyBy } from "es-toolkit";
 import type { LlmClient } from "../adapters/llm/types.js";
 import { parseMemoryMarkdown } from "../store/markdown/parse.js";
 import type { ParsedEntry } from "../store/types.js";
-import { entryDedupeKey } from "./entryKey.js";
+import { entryDedupeKey } from "../utils/memory/index.js";
 import { buildConsolidateMergePrompt, formatEntriesForConsolidation } from "./mergePrompt.js";
 import { dedupeEntries } from "./mergeEntries.js";
 

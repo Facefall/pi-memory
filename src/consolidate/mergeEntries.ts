@@ -1,6 +1,6 @@
 import { orderBy } from "es-toolkit";
 
-import { entryDedupeKey } from "./entryKey.js";
+import { entryDedupeKey } from "../utils/memory/index.js";
 import type { ParsedEntry } from "../store/types.js";
 import { MEMORY_SECTIONS } from "../store/types.js";
 

@@ -1,4 +1,5 @@
 import { parseMemoryMarkdown } from "../store/markdown/parse.js";
+import { entryDedupeKey } from "../utils/memory/index.js";
 import { MEMORY_SECTIONS, type MemorySection, type StoreMemoryEntry } from "../store/types.js";
 
 const MEMORY_EXPORT_HEADER_RE = /^##\s+Memory Export\s*$/im;
@@ -55,7 +56,7 @@ export function parseMemoryExport(summary: string): StoreMemoryEntry[] {
   const seen = new Set<string>();
 
   return entries.filter((entry) => {
-    const key = `${entry.section}\0${entry.content.trim()}`;
+    const key = entryDedupeKey(entry);
     if (seen.has(key)) return false;
     seen.add(key);
     return entry.content.trim().length > 0;
