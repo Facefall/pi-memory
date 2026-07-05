@@ -7,7 +7,7 @@ import type { ParsedEntry, StoreMemoryEntry } from "./types.js";
 
 export type MemoryStoreForIngest = {
   listEntries(): Promise<ParsedEntry[]>;
-  appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<void>;
+  appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<number>;
 };
 
 export type IngestMemoryExportResult = {
@@ -34,9 +34,10 @@ export async function ingestMemoryExport(opts: {
     }
   }
 
-  if (entries.length > 0) {
-    await opts.store.appendMany(entries, { mode: "ifAbsent" });
+  if (entries.length === 0) {
+    return { appended: 0 };
   }
 
-  return { appended: entries.length };
+  const appended = await opts.store.appendMany(entries, { mode: "ifAbsent" });
+  return { appended };
 }

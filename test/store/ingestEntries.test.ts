@@ -6,7 +6,7 @@ import { ingestMemoryExport } from "../../src/store/ingestEntries.js";
 function mockStore(existing: ParsedEntry[] = []) {
   return {
     listEntries: vi.fn().mockResolvedValue(existing),
-    appendMany: vi.fn().mockResolvedValue(undefined),
+    appendMany: vi.fn(async (entries: StoreMemoryEntry[]) => entries.length),
   };
 }
 
@@ -70,6 +70,20 @@ describe("ingestMemoryExport", () => {
       [expect.objectContaining({ section: "Findings", content: "Another fact" })],
       { mode: "ifAbsent" },
     );
+  });
+
+  it("returns actual appendMany count when all entries are skipped", async () => {
+    const store = mockStore();
+    store.appendMany.mockResolvedValue(0);
+
+    const result = await ingestMemoryExport({
+      store,
+      summary: SAMPLE_SUMMARY,
+      isSubagent: false,
+    });
+
+    expect(result).toEqual({ appended: 0 });
+    expect(store.appendMany).toHaveBeenCalled();
   });
 
   it("skips subagent ingest when export duplicates parent memory entirely", async () => {

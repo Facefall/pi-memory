@@ -152,19 +152,20 @@ export class MemoryStore implements ConsolidateStoreAccess {
     if (written) this.listeners.notifyAfterWrite();
   }
 
-  async appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<void> {
-    let written = false;
+  async appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<number> {
+    let written = 0;
     const deps = this.writePathDeps();
     await this.backend.withMemoryLock(async () => {
       for (const entry of entries) {
         if (opts?.mode === "ifAbsent") {
-          if (await appendIfAbsentUnlocked(deps, entry)) written = true;
+          if (await appendIfAbsentUnlocked(deps, entry)) written += 1;
         } else if (await tryAppendUnlocked(deps, entry)) {
-          written = true;
+          written += 1;
         }
       }
     });
-    if (written) this.listeners.notifyAfterWrite();
+    if (written > 0) this.listeners.notifyAfterWrite();
+    return written;
   }
 
   async appendIfAbsent(entry: StoreMemoryEntry): Promise<boolean> {
