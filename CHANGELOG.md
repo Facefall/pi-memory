@@ -1,5 +1,14 @@
 # @chendpoc/pi-memory
 
+## 0.3.2
+
+### Patch Changes
+
+- Fix CI tests for warmSidecar query timeout options and launchd scheduler sync on Linux.
+- Extend the public roadmap through 0.7 (observability/TUI at 0.6, cloud sync at 0.7).
+- Add a public launch kit doc and link it from the README.
+- Ship `doc/ROADMAP.md`, `doc/ROADMAP-zh.md`, and `doc/LAUNCH-KIT.md` in the npm tarball; add discovery keywords.
+
 ## 0.3.1
 
 ### Patch Changes
