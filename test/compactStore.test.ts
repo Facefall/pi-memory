@@ -71,4 +71,29 @@ describe("MemoryStore.appendFromCompaction", () => {
     expect((await store.listEntries()).length).toBe(1);
     expect(await store.hasProcessedCompaction("cmp-sub-1")).toBe(true);
   });
+
+  it("redacts secrets in compaction Memory Export before ingest", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pi-memory-compact-redact-"));
+    const store = createMemoryStore({ agentDir: tmpDir });
+    await store.ensureInitialized();
+
+    const token = "ghp_" + "d".repeat(36);
+    const summary = `## Memory Export
+### Findings
+- GitHub token for deploy: ${token}
+`;
+
+    await new Promise<void>((resolve) => {
+      store.appendFromCompaction({
+        compactionId: "cmp-redact-1",
+        summary,
+        onComplete: resolve,
+      });
+    });
+
+    const entries = await store.listEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.content).not.toContain(token);
+    expect(entries[0]?.content).toContain("[REDACTED]");
+  });
 });

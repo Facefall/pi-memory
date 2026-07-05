@@ -30,6 +30,8 @@ import {
   writeText,
 } from "../utils/fs.js";
 import { buildIndexDocuments } from "./indexChunks.js";
+import { isEmptyAfterRedaction, redactText } from "../redaction/redactText.js";
+import { debugMemory } from "../utils/debugLog.js";
 import { daysSince, formatLocalDate, formatTimestamp, type TimeInput } from "../utils/time.js";
 import { getAgentPaths, resolveAgentDir } from "./paths.js";
 import type {
@@ -142,31 +144,33 @@ export class MemoryStore {
   }
 
   async append(entry: StoreMemoryEntry): Promise<void> {
+    let written = false;
     await this.backend.withMemoryLock(async () => {
-      await this.appendUnlocked(entry);
+      written = await this.tryAppendUnlocked(entry);
     });
-    this.notifyAfterWrite();
+    if (written) this.notifyAfterWrite();
   }
 
   async appendUser(entry: Omit<StoreMemoryEntry, "userAuthored">): Promise<void> {
+    let written = false;
     await this.backend.withMemoryLock(async () => {
-      await this.appendUnlocked({ ...entry, userAuthored: true });
+      written = await this.tryAppendUnlocked({ ...entry, userAuthored: true });
     });
-    this.notifyAfterWrite();
+    if (written) this.notifyAfterWrite();
   }
 
   async appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<void> {
+    let written = false;
     await this.backend.withMemoryLock(async () => {
       for (const entry of entries) {
         if (opts?.mode === "ifAbsent") {
-          const added = await this.appendIfAbsentUnlocked(entry);
-          if (!added) continue;
-        } else {
-          await this.appendUnlocked(entry);
+          if (await this.appendIfAbsentUnlocked(entry)) written = true;
+        } else if (await this.tryAppendUnlocked(entry)) {
+          written = true;
         }
       }
     });
-    if (entries.length > 0) this.notifyAfterWrite();
+    if (written) this.notifyAfterWrite();
   }
 
   async appendIfAbsent(entry: StoreMemoryEntry): Promise<boolean> {
@@ -219,6 +223,7 @@ export class MemoryStore {
   }
 
   async updateEntry(id: string, patch: Partial<StoreMemoryEntry>): Promise<void> {
+    // Path B: correction detector should reuse prepareEntryForWrite when content is patched.
     await this.backend.withMemoryLock(async () => {
       const resolved = await this.readResolvedUnlocked();
       const target = resolved.entries.find((entry) => entry.id === id);
@@ -361,17 +366,59 @@ export class MemoryStore {
     for (const listener of this.consolidateCheckListeners) listener();
   }
 
-  private async appendUnlocked(entry: StoreMemoryEntry): Promise<void> {
+  /** Ground Truth ingress gate: normalize → redact → skip if empty. */
+  private prepareEntryForWrite(entry: StoreMemoryEntry): StoreMemoryEntry | null {
     const normalized = this.normalizeEntry(entry);
+    try {
+      const result = redactText(normalized.content);
+      const prepared: StoreMemoryEntry = { ...normalized, content: result.text };
+
+      if (isEmptyAfterRedaction(prepared.content)) {
+        debugMemory("write", "write_skipped", {
+          reason: "redaction_empty",
+          entryId: prepared.id,
+        });
+        return null;
+      }
+
+      if (result.mutated) {
+        debugMemory("write", "write_redacted", {
+          hitCount: result.hitCount,
+          secretHits: result.secretHits,
+          piiHits: result.piiHits,
+          entryId: prepared.id,
+          policyVersion: result.policyVersion,
+        });
+      }
+
+      return prepared;
+    } catch {
+      debugMemory("write", "write_skipped", {
+        reason: "redaction_error",
+        entryId: normalized.id,
+      });
+      return null;
+    }
+  }
+
+  private async tryAppendUnlocked(entry: StoreMemoryEntry): Promise<boolean> {
+    const prepared = this.prepareEntryForWrite(entry);
+    if (!prepared) return false;
+    await this._appendOne(prepared);
+    return true;
+  }
+
+  /** Physical write only; entry must already pass prepareEntryForWrite. */
+  private async _appendOne(entry: StoreMemoryEntry): Promise<void> {
     const main = await this.backend.readText(this.paths.memoryFile);
     if (countLines(main) >= this.maxLines) {
-      await this.appendToOverflowUnlocked(normalized, main);
+      await this.appendToOverflowUnlocked(entry, main);
       return;
     }
 
-    const next = this.insertEntryIntoMarkdown(main, normalized);
+    const next = this.insertEntryIntoMarkdown(main, entry);
     if (countLines(next) > this.maxLines) {
-      await this.appendToOverflowUnlocked(normalized, main);
+      await this.appendToOverflowUnlocked(entry, main);
       return;
     }
 
@@ -379,12 +426,16 @@ export class MemoryStore {
   }
 
   private async appendIfAbsentUnlocked(entry: StoreMemoryEntry): Promise<boolean> {
+    const prepared = this.prepareEntryForWrite(entry);
+    if (!prepared) return false;
+
     const resolved = await this.readResolvedUnlocked();
     const exists = resolved.entries.some(
-      (item) => item.section === entry.section && item.content.trim() === entry.content.trim(),
+      (item) => item.section === prepared.section && item.content.trim() === prepared.content.trim(),
     );
     if (exists) return false;
-    await this.appendUnlocked(entry);
+
+    await this._appendOne(prepared);
     return true;
   }
 
