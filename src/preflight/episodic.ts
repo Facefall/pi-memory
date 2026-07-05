@@ -106,7 +106,10 @@ export async function runEpisodicPreflight(
         if (queryBudget <= 0 || options.signal?.aborted) {
           throw new Error(PREFLIGHT_TIMEOUT_MESSAGE);
         }
-        const result = await query(options.socketPath, retrievalQuery, queryBudget);
+        const result = await query(options.socketPath, retrievalQuery, {
+          timeoutMs: queryBudget,
+          signal: options.signal,
+        });
         sidecarMs = nowMs() - sidecarStartedAt;
         resultCount = result.results.length;
         sidecarQueryCache.set(options.agentDir, retrievalQuery, result.results);

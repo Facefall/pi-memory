@@ -33,7 +33,7 @@ export async function warmSidecar(
     const queryStartedAt = nowMs();
     const queryTimeoutMs = options.queryTimeoutMs ?? SIDECAR_WARMUP_QUERY_TIMEOUT_MS;
     try {
-      await query(socketPath, ".", queryTimeoutMs);
+      await query(socketPath, ".", { timeoutMs: queryTimeoutMs });
     } catch {
       // warm query is best-effort
     }

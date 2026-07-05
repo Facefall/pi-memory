@@ -10,19 +10,60 @@ import {
 import { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "../utils/jsonl.js";
 import { isErrorResponse, type IndexDocument, type IndexStats, type SidecarResponse } from "./protocol.js";
 
+export type SidecarRequestOptions = {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+};
+
 export function sidecarRequest<T extends SidecarResponse>(
   socketPath: string,
   frame: Record<string, unknown>,
-  timeoutMs = SIDECAR_QUERY_TIMEOUT_MS,
+  options: SidecarRequestOptions = {},
 ): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? SIDECAR_QUERY_TIMEOUT_MS;
+  const { signal } = options;
+
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal));
+      return;
+    }
+
     const socket = net.connect(socketPath);
     const framer = new JsonlFramer();
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      socket.destroy();
+      reject(error);
+    };
+
+    const succeed = (value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const onAbort = () => {
+      fail(abortError(signal!));
+    };
 
     const timer = setTimeout(() => {
-      socket.destroy();
-      reject(new Error("Sidecar request timed out"));
+      fail(new Error("Sidecar request timed out"));
     }, timeoutMs);
+
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
 
     socket.on("connect", () => {
       socket.write(serializeJsonlFrame(frame));
@@ -30,29 +71,34 @@ export function sidecarRequest<T extends SidecarResponse>(
 
     socket.on("data", (chunk) => {
       for (const line of framer.push(chunk.toString())) {
-        clearTimeout(timer);
         socket.end();
 
         let response: SidecarResponse;
         try {
           response = parseJsonlLine<SidecarResponse>(line);
         } catch {
-          reject(new Error("Invalid JSON response from sidecar"));
+          fail(new Error("Invalid JSON response from sidecar"));
           return;
         }
 
         if (isErrorResponse(response)) {
-          reject(new Error(response.error));
+          fail(new Error(response.error));
           return;
         }
 
-        resolve(response as T);
+        succeed(response as T);
         return;
       }
     });
 
-    socket.on("error", reject);
+    socket.on("error", (error) => {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    });
   });
+}
+
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error("Aborted");
 }
 
 export async function ping(socketPath: string): Promise<boolean> {
@@ -60,7 +106,7 @@ export async function ping(socketPath: string): Promise<boolean> {
     const res = await sidecarRequest<Extract<SidecarResponse, { type: "pong" }>>(
       socketPath,
       { type: "ping" },
-      SIDECAR_PING_TIMEOUT_MS,
+      { timeoutMs: SIDECAR_PING_TIMEOUT_MS },
     );
     return res.type === "pong";
   } catch {
@@ -75,7 +121,7 @@ export async function fetchIndexStats(
     const res = await sidecarRequest<Extract<SidecarResponse, { type: "stats_ok" }>>(
       socketPath,
       { type: "stats" },
-      SIDECAR_PING_TIMEOUT_MS,
+      { timeoutMs: SIDECAR_PING_TIMEOUT_MS },
     );
     if (res.type !== "stats_ok") return { error: "unexpected sidecar response" };
     const { type: _type, ...stats } = res;
@@ -89,13 +135,13 @@ export async function fetchIndexStats(
 export async function query(
   socketPath: string,
   queryText: string,
-  timeoutMs = SIDECAR_QUERY_TIMEOUT_MS,
+  options: SidecarRequestOptions = {},
 ) {
   const request_id = randomUUID();
   return sidecarRequest<Extract<SidecarResponse, { type: "result" }>>(
     socketPath,
     { type: "query", request_id, query: queryText },
-    timeoutMs,
+    options,
   );
 }
 
@@ -109,6 +155,6 @@ export async function reindex(
   return sidecarRequest<ReindexResult>(
     socketPath,
     { type: "reindex", request_id, documents },
-    SIDECAR_REINDEX_TIMEOUT_MS,
+    { timeoutMs: SIDECAR_REINDEX_TIMEOUT_MS },
   );
 }
