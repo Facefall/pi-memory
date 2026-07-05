@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import type { LlmClient } from "../adapters/llm/types.js";
-import { isSubagentSession } from "../preflight/session.js";
+import { isSubagentSession } from "../utils/session/index.js";
 import type { MemoryStore } from "../store/memoryStore.js";
 import { runDualPurposeCompactionSummary } from "./runSummary.js";
 

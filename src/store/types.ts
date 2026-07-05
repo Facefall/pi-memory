@@ -34,8 +34,6 @@ export type IntegrityReport = {
   issues: string[];
 };
 
-export type { LlmClient } from "../adapters/llm/types.js";
-
 export type MemoryStoreOptions = {
   agentDir: string;
   memoryFileName?: string;

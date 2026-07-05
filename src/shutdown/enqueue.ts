@@ -1,8 +1,10 @@
 import { SHUTDOWN_QUEUE_FILE } from "../constants/memory.js";
-import { serializeJsonlFrame } from "../ipc/jsonlFramer.js";
+import { serializeJsonlFrame } from "../utils/jsonl.js";
 import { appendText, joinPath } from "../utils/fs.js";
 
 import type { SessionShutdownEvent } from "@earendil-works/pi-coding-agent";
+
+export { readParentSession } from "../utils/session/index.js";
 
 export type ShutdownQueueEntry = {
   sessionFile: string;
@@ -21,9 +23,4 @@ export async function enqueueShutdownMetadata(
   entry: ShutdownQueueEntry,
 ): Promise<void> {
   await appendText(shutdownQueuePath(agentDir), serializeJsonlFrame(entry));
-}
-
-export function readParentSession(header: Record<string, unknown> | null): string | undefined {
-  const parent = header?.parentSession ?? header?.parent_session;
-  return typeof parent === "string" && parent.trim().length > 0 ? parent.trim() : undefined;
 }

@@ -1,4 +1,3 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
   buildSessionContext,
   convertToLlm,
@@ -9,23 +8,8 @@ import {
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 
-import { stripPrivateMemory } from "../preflight/strip.js";
+import { stripPrivateMemoryFromMessages } from "../utils/memory/index.js";
 import { readTextRequired } from "../utils/fs.js";
-
-function stripPrivateMemoryFromMessages(messages: AgentMessage[]): AgentMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "user") return message;
-    if (typeof message.content === "string") {
-      return { ...message, content: stripPrivateMemory(message.content) };
-    }
-    return {
-      ...message,
-      content: message.content.map((block) =>
-        block.type === "text" ? { ...block, text: stripPrivateMemory(block.text) } : block,
-      ),
-    } as AgentMessage;
-  });
-}
 
 function toSessionEntries(fileEntries: FileEntry[]): SessionEntry[] {
   return fileEntries.filter((entry): entry is SessionEntry => entry.type !== "session");

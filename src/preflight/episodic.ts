@@ -1,6 +1,7 @@
 import { readPreflightRuntimeConfig } from "../config/preflight.js";
 import { resolvePreflightBudget } from "../config/preflightBudget.js";
 import type { LlmClient } from "../adapters/llm/types.js";
+import { preflightAbortSignal, PREFLIGHT_TIMEOUT_MESSAGE } from "../utils/async.js";
 import { debugMemory } from "../utils/debugLog.js";
 import { nowMs, remainingMs } from "../utils/time.js";
 import type { MemoryStore } from "../store/memoryStore.js";
@@ -10,7 +11,7 @@ import {
   extractQueryIntent,
   shouldRunEpisodicPreflight,
 } from "./queryIntent.js";
-import { sidecarQueryCache } from "./queryCache.js";
+import { sidecarQueryCache } from "../sidecar/queryCache.js";
 import {
   renderFallbackPrivateMemory,
   renderSidecarPrivateMemory,
@@ -36,42 +37,6 @@ export type EpisodicPreflightOptions = {
 export type EpisodicPreflightResult = {
   privateContext: string;
 };
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  if (signal?.aborted) {
-    throw new Error("aborted");
-  }
-  if (timeoutMs <= 0) {
-    throw new Error("preflight timeout");
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("preflight timeout")), timeoutMs);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new Error("aborted"));
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-        reject(error);
-      },
-    );
-  });
-}
 
 /**
  * Fail-silent episodic preflight: QueryIntent (optional) → buildRetrievalQuery → sidecar.query → fallback.
@@ -106,16 +71,13 @@ export async function runEpisodicPreflight(
     let intentCacheHit = false;
 
     try {
-      const extracted = await withTimeout(
-        extractQueryIntent(userInput, options.llm ?? null, {
-          forceIntent: options.forceIntent,
-          signal: options.signal,
-          sessionId: options.sessionId,
-          intentCache: runtime.intentCache,
-        }),
-        intentBudget,
-        options.signal,
-      );
+      const intentSignal = preflightAbortSignal(intentBudget, options.signal);
+      const extracted = await extractQueryIntent(userInput, options.llm ?? null, {
+        forceIntent: options.forceIntent,
+        signal: intentSignal,
+        sessionId: options.sessionId,
+        intentCache: runtime.intentCache,
+      });
       intent = extracted.intent;
       intentSkipped = extracted.skipped;
       intentCacheHit = extracted.cacheHit;
@@ -141,11 +103,10 @@ export async function runEpisodicPreflight(
       const sidecarStartedAt = nowMs();
       const queryBudget = Math.min(budget.sidecarMs, remainingMs(deadline));
       try {
-        const result = await withTimeout(
-          query(options.socketPath, retrievalQuery, queryBudget),
-          queryBudget,
-          options.signal,
-        );
+        if (queryBudget <= 0 || options.signal?.aborted) {
+          throw new Error(PREFLIGHT_TIMEOUT_MESSAGE);
+        }
+        const result = await query(options.socketPath, retrievalQuery, queryBudget);
         sidecarMs = nowMs() - sidecarStartedAt;
         resultCount = result.results.length;
         sidecarQueryCache.set(options.agentDir, retrievalQuery, result.results);

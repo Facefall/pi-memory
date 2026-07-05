@@ -66,3 +66,14 @@ export {
   type ConsolidateSchedulerPaths,
   type ConsolidateTemplateName,
 } from "./scheduler.js";
+
+export {
+  mergeAbortSignals,
+  preflightAbortSignal,
+  PREFLIGHT_ABORTED_MESSAGE,
+  PREFLIGHT_TIMEOUT_MESSAGE,
+  throwIfAborted,
+} from "./async.js";
+export { JsonlFramer, parseJsonlLine, serializeJsonlFrame } from "./jsonl.js";
+export { entryDedupeKey, stripPrivateMemory, stripPrivateMemoryFromMessages } from "./memory/index.js";
+export { isSubagentSession, readParentSession } from "./session/index.js";

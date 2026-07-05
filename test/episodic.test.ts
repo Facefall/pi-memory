@@ -80,7 +80,11 @@ describe("runEpisodicPreflight", () => {
 
   it("falls back to raw_query when helper LLM times out", async () => {
     const llm: LlmClient = {
-      complete: vi.fn(() => new Promise(() => {})),
+      complete: vi.fn((_prompt, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        }),
+      ),
     };
 
     await runEpisodicPreflight("remember what testing framework we picked last time", {

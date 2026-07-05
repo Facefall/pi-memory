@@ -1,4 +1,4 @@
-import { parseJsonlLine } from "../ipc/jsonlFramer.js";
+import { parseJsonlLine } from "../utils/jsonl.js";
 import { readText } from "../utils/fs.js";
 
 import { shutdownQueuePath, type ShutdownQueueEntry } from "./enqueue.js";
