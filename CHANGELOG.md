@@ -1,5 +1,15 @@
 # @chendpoc/pi-memory
 
+## 0.3.1
+
+### Patch Changes
+
+- Colocate maintenance logs under `<PI_MEMORY_AGENT_DIR>/logs/` instead of `~/.pi/logs`; create `logs/` during workspace init.
+- Auto-sync macOS launchd maintenance job (`com.pi.memory.maintenance`) on postinstall, `pi-memory init`, and Pi `session_start`; remove legacy labels (e.g. `dev.pi.memory-consolidate`).
+- Add `pi-memory scheduler sync` and best-effort launchd bootstrap retry when the plist is unchanged but the job is not loaded.
+- Add `PI_MEMORY_SKIP_SCHEDULER_SYNC` to disable automatic scheduler install/update.
+- Ship scheduler template files and `doc/README-zh.md` in the npm tarball.
+
 ## 0.3.0
 
 ### Minor Changes
