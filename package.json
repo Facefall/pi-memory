@@ -38,7 +38,12 @@
   },
   "files": [
     "dist",
+    "doc/README-zh.md",
     "templates/MEMORY.md.example",
+    "templates/com.pi.memory.consolidate.plist.example",
+    "templates/consolidate.cmd.example",
+    "templates/crontab.example",
+    "templates/schtasks.example.txt",
     "scripts/path-utils.mjs",
     "scripts/init-memory-workspace.mjs",
     "scripts/platform-fs.mjs",
