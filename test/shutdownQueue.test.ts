@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseJsonlLine } from "../src/ipc/jsonlFramer.js";
+import { parseJsonlLine } from "../src/utils/jsonl.js";
 import {
   enqueueShutdownMetadata,
   shutdownQueuePath,

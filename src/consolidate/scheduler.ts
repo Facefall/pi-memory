@@ -3,7 +3,7 @@ import { debounce } from "es-toolkit";
 import { DEFAULT_CONSOLIDATE_CHECK_INTERVAL_MS, DEFAULT_CONSOLIDATE_DEBOUNCE_MS } from "../constants/timing.js";
 
 import type { LlmClient } from "../adapters/llm/types.js";
-import type { MemoryStore } from "../store/memoryStore.js";
+import type { ConsolidateStoreAccess } from "../store/consolidatePort.js";
 import { runConsolidateJob } from "./runJob.js";
 
 export type ConsolidateScheduler = {
@@ -12,7 +12,7 @@ export type ConsolidateScheduler = {
 };
 
 export function createConsolidateScheduler(opts: {
-  getStore(): MemoryStore | null;
+  getStore(): ConsolidateStoreAccess | null;
   getAgentDir(): string | null;
   getLlm(): LlmClient | null;
   debounceMs?: number;

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { LlmClient } from "../src/adapters/llm/types.js";
+import { mergeMemoryEntries } from "../src/consolidate/mergeMemoryEntries.js";
 import { createMemoryStore } from "../src/store/index.js";
 
 const noopLlm: LlmClient = {
@@ -14,7 +15,7 @@ const noopLlm: LlmClient = {
   },
 };
 
-describe("MemoryStore consolidate", () => {
+describe("MemoryStore consolidate port", () => {
   let tmpDir: string;
 
   afterEach(() => {
@@ -55,7 +56,7 @@ describe("MemoryStore consolidate", () => {
       });
     }
 
-    await store.consolidate(noopLlm);
+    await mergeMemoryEntries(store, noopLlm);
 
     const stats = await store.getStats();
     expect(stats.lastConsolidatedAt).toBeTruthy();
@@ -91,7 +92,7 @@ describe("MemoryStore consolidate", () => {
       timestamp: "2026-07-04T00:00:00.000Z",
     });
 
-    await store.consolidate(noopLlm);
+    await mergeMemoryEntries(store, noopLlm);
 
     expect(() => accessSync(autoPath)).toThrow();
     expect((await store.getStats()).overflowFileCount).toBe(0);

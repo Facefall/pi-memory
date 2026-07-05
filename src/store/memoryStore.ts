@@ -1,62 +1,52 @@
 import { randomBytes } from "node:crypto";
 
-import { parseMemoryExport } from "../compact/parseMemoryExport.js";
 import {
-  filterCompactionDelta,
-  shouldSkipSubagentCompactionIngest,
-} from "../compact/subagentDelta.js";
-import { dedupeEntries } from "../consolidate/mergeEntries.js";
-import { mergeEntriesWithLlm } from "../consolidate/mergeWithLlm.js";
-import { MarkdownMemoryBackend } from "./backend.js";
-import {
-  AUTO_FILE_PREFIX,
-  COMPACTION_STATE_FILE,
   CONSOLIDATE_GC_INTERVAL_DAYS,
   CONSOLIDATE_OVERFLOW_FILE_THRESHOLD,
   DEFAULT_FALLBACK_MAX_CHARS,
   DEFAULT_MAX_LINES,
   DEFAULT_MEMORY_FILE,
-  MEMORY_GC_FILE,
+  AUTO_FILE_PREFIX,
 } from "../constants/memory.js";
-import { countLines, formatEntryLine, formatSectionHeader } from "./markdown/format.js";
-import { listOverflowPointers, parseMemoryMarkdown } from "./markdown/parse.js";
-import { initializeMemoryWorkspace } from "../init/workspace.js";
 import { readChunkingConfig } from "../config/chunking.js";
-import {
-  joinPath,
-  pathBasename,
-  readText,
-  readTextRequired,
-  writeText,
-} from "../utils/fs.js";
-import { buildIndexDocuments } from "./indexChunks.js";
-import { isEmptyAfterRedaction, redactText } from "../redaction/redactText.js";
-import { debugMemory } from "../utils/debugLog.js";
+import { initializeMemoryWorkspace } from "./initWorkspace.js";
+import { joinPath, readText, readTextRequired, writeText } from "../utils/fs.js";
 import { daysSince, formatLocalDate, formatTimestamp, type TimeInput } from "../utils/time.js";
+import type { ConsolidateStoreAccess } from "./consolidatePort.js";
+import { ingestMemoryExport } from "./ingestEntries.js";
+import { MarkdownMemoryBackend } from "./backend.js";
+import { buildIndexDocuments } from "./indexChunks.js";
+import { createStoreListeners } from "./listeners.js";
+import { countLines } from "./markdown/format.js";
+import { listOverflowPointers } from "./markdown/parse.js";
 import { getAgentPaths, resolveAgentDir } from "./paths.js";
+import { collectResolvedEntries } from "./resolveEntries.js";
 import type {
   IndexDocument,
   IntegrityReport,
-  LlmClient,
   MemoryStats,
   MemoryStoreOptions,
   ParsedEntry,
   ResolvedMemory,
   StoreMemoryEntry,
 } from "./types.js";
-import { MEMORY_SECTIONS } from "./types.js";
+import {
+  appendIfAbsentUnlocked,
+  rewriteEntriesUnlocked,
+  tryAppendUnlocked,
+  type WritePathDeps,
+} from "./writePath.js";
 
 type CompactionState = {
   processed: string[];
 };
 
-export class MemoryStore {
+export class MemoryStore implements ConsolidateStoreAccess {
   private readonly paths: ReturnType<typeof getAgentPaths>;
   private readonly backend: MarkdownMemoryBackend;
   private readonly maxLines: number;
   private readonly fallbackMaxChars: number;
-  private readonly syncToSidecarListeners = new Set<() => void>();
-  private readonly consolidateCheckListeners = new Set<() => void>();
+  private readonly listeners = createStoreListeners(() => this.consolidating);
   private consolidating = false;
 
   constructor(opts: MemoryStoreOptions) {
@@ -65,6 +55,26 @@ export class MemoryStore {
     this.backend = new MarkdownMemoryBackend(this.paths.memoryFile);
     this.maxLines = opts.maxLines ?? DEFAULT_MAX_LINES;
     this.fallbackMaxChars = opts.defaultFallbackMaxChars ?? DEFAULT_FALLBACK_MAX_CHARS;
+  }
+
+  private collectResolvedOpts() {
+    return {
+      backend: this.backend,
+      agentDir: this.paths.agentDir,
+      memoryFile: this.paths.memoryFile,
+    };
+  }
+
+  private writePathDeps(): WritePathDeps {
+    return {
+      backend: this.backend,
+      memoryFile: this.paths.memoryFile,
+      agentDir: this.paths.agentDir,
+      maxLines: this.maxLines,
+      createId: () => this.newEntryId(),
+      newAutoFilePath: () => this.newAutoFilePath(),
+      readResolvedUnlocked: () => this.readResolvedUnlocked(),
+    };
   }
 
   get agentDir(): string {
@@ -104,24 +114,7 @@ export class MemoryStore {
 
   async readResolved(): Promise<ResolvedMemory> {
     await this.ensureInitialized();
-    const main = await this.backend.readText(this.paths.memoryFile);
-    const entries = [...parseMemoryMarkdown(main, this.paths.memoryFile)];
-
-    for (const fileName of listOverflowPointers(main)) {
-      const path = this.backend.autoFilePath(this.paths.agentDir, fileName);
-      const overflow = await this.backend.readText(path);
-      entries.push(...parseMemoryMarkdown(overflow, path));
-    }
-
-    const autoFiles = await this.backend.listAutoFiles(this.paths.agentDir);
-    for (const fileName of autoFiles) {
-      if (listOverflowPointers(main).includes(fileName)) continue;
-      const path = this.backend.autoFilePath(this.paths.agentDir, fileName);
-      const orphan = await this.backend.readText(path);
-      entries.push(...parseMemoryMarkdown(orphan, path));
-    }
-
-    return { content: main, entries };
+    return collectResolvedEntries(this.collectResolvedOpts());
   }
 
   async readForFallback(maxChars = this.fallbackMaxChars): Promise<string> {
@@ -146,43 +139,43 @@ export class MemoryStore {
   async append(entry: StoreMemoryEntry): Promise<void> {
     let written = false;
     await this.backend.withMemoryLock(async () => {
-      written = await this.tryAppendUnlocked(entry);
+      written = await tryAppendUnlocked(this.writePathDeps(), entry);
     });
-    if (written) this.notifyAfterWrite();
+    if (written) this.listeners.notifyAfterWrite();
   }
 
   async appendUser(entry: Omit<StoreMemoryEntry, "userAuthored">): Promise<void> {
     let written = false;
     await this.backend.withMemoryLock(async () => {
-      written = await this.tryAppendUnlocked({ ...entry, userAuthored: true });
+      written = await tryAppendUnlocked(this.writePathDeps(), { ...entry, userAuthored: true });
     });
-    if (written) this.notifyAfterWrite();
+    if (written) this.listeners.notifyAfterWrite();
   }
 
   async appendMany(entries: StoreMemoryEntry[], opts?: { mode?: "ifAbsent" }): Promise<void> {
     let written = false;
+    const deps = this.writePathDeps();
     await this.backend.withMemoryLock(async () => {
       for (const entry of entries) {
         if (opts?.mode === "ifAbsent") {
-          if (await this.appendIfAbsentUnlocked(entry)) written = true;
-        } else if (await this.tryAppendUnlocked(entry)) {
+          if (await appendIfAbsentUnlocked(deps, entry)) written = true;
+        } else if (await tryAppendUnlocked(deps, entry)) {
           written = true;
         }
       }
     });
-    if (written) this.notifyAfterWrite();
+    if (written) this.listeners.notifyAfterWrite();
   }
 
   async appendIfAbsent(entry: StoreMemoryEntry): Promise<boolean> {
     let added = false;
     await this.backend.withMemoryLock(async () => {
-      added = await this.appendIfAbsentUnlocked(entry);
+      added = await appendIfAbsentUnlocked(this.writePathDeps(), entry);
     });
-    if (added) this.notifyAfterWrite();
+    if (added) this.listeners.notifyAfterWrite();
     return added;
   }
 
-  /** Fire-and-forget: parse Memory Export from compact summary → appendIfAbsent. */
   appendFromCompaction(opts: {
     compactionId: string;
     summary: string;
@@ -201,22 +194,11 @@ export class MemoryStore {
     if (await this.hasProcessedCompaction(opts.compactionId)) return;
 
     await this.ensureInitialized();
-    const parsed = parseMemoryExport(opts.summary);
-
-    if (opts.subagent) {
-      const existing = await this.listEntries();
-      const delta = filterCompactionDelta(parsed, existing);
-      if (shouldSkipSubagentCompactionIngest(parsed, delta)) {
-        await this.markCompactionProcessed(opts.compactionId);
-        await opts.onComplete?.();
-        return;
-      }
-      if (delta.length > 0) {
-        await this.appendMany(delta, { mode: "ifAbsent" });
-      }
-    } else if (parsed.length > 0) {
-      await this.appendMany(parsed, { mode: "ifAbsent" });
-    }
+    await ingestMemoryExport({
+      store: this,
+      summary: opts.summary,
+      isSubagent: !!opts.subagent,
+    });
 
     await this.markCompactionProcessed(opts.compactionId);
     await opts.onComplete?.();
@@ -239,9 +221,12 @@ export class MemoryStore {
         userAuthored: patch.userAuthored ?? target.userAuthored,
       };
 
-      await this.rewriteEntriesUnlocked(resolved.entries.map((entry) => (entry.id === id ? { ...entry, ...next } : entry)));
+      await rewriteEntriesUnlocked(
+        this.writePathDeps(),
+        resolved.entries.map((entry) => (entry.id === id ? { ...entry, ...next } : entry)),
+      );
     });
-    this.notifyAfterWrite();
+    this.listeners.notifyAfterWrite();
   }
 
   async removeEntry(id: string, opts?: { force?: boolean }): Promise<void> {
@@ -252,16 +237,19 @@ export class MemoryStore {
       if (target.userAuthored && !opts?.force) {
         throw new Error(`Cannot remove user-authored entry without force: ${id}`);
       }
-      await this.rewriteEntriesUnlocked(resolved.entries.filter((entry) => entry.id !== id));
+      await rewriteEntriesUnlocked(
+        this.writePathDeps(),
+        resolved.entries.filter((entry) => entry.id !== id),
+      );
     });
-    this.notifyAfterWrite();
+    this.listeners.notifyAfterWrite();
   }
 
   async rewrite(content: string): Promise<void> {
     await this.backend.withMemoryLock(async () => {
       await this.backend.writeText(this.paths.memoryFile, content);
     });
-    this.notifyAfterWrite({ skipConsolidateCheck: true });
+    this.listeners.notifyAfterWrite({ skipConsolidateCheck: true });
   }
 
   async shouldConsolidate(at?: TimeInput, cronFired = false): Promise<boolean> {
@@ -272,41 +260,27 @@ export class MemoryStore {
     return daysSince(stats.lastConsolidatedAt, at) >= CONSOLIDATE_GC_INTERVAL_DAYS;
   }
 
-  async consolidate(llm: LlmClient): Promise<void> {
+  isConsolidating(): boolean {
+    return this.consolidating;
+  }
+
+  async rewriteMemoryUnderLock(
+    updateEntries: (entries: ParsedEntry[]) => Promise<ParsedEntry[]>,
+  ): Promise<void> {
     if (this.consolidating) return;
 
     this.consolidating = true;
     try {
       await this.backend.withMemoryLock(async () => {
         const resolved = await this.readResolvedUnlocked();
-        let entries = dedupeEntries(resolved.entries);
-
-        try {
-          entries = await mergeEntriesWithLlm(entries, llm);
-        } catch {
-          // rule-based dedupe only
-        }
-
-        await this.rewriteEntriesUnlocked(entries);
+        const entries = await updateEntries(resolved.entries);
+        await rewriteEntriesUnlocked(this.writePathDeps(), entries);
         await writeText(this.paths.memoryGcFile, `${formatTimestamp()}\n`);
       });
-      this.notifySyncToSidecar();
+      this.listeners.notifySyncToSidecar();
     } finally {
       this.consolidating = false;
     }
-  }
-
-  consolidateInBackground(
-    llm: LlmClient,
-    opts: { onComplete?: () => void | Promise<void> } = {},
-  ): void {
-    void this.consolidate(llm)
-      .then(() => opts.onComplete?.())
-      .catch(() => {});
-  }
-
-  async forceConsolidate(llm: LlmClient): Promise<void> {
-    await this.consolidate(llm);
   }
 
   async hasProcessedCompaction(compactionId: string): Promise<boolean> {
@@ -339,203 +313,16 @@ export class MemoryStore {
     return { ok: issues.length === 0, issues };
   }
 
-  /** Register a listener to sync MEMORY.md changes to the sidecar vector index. */
   onSyncToSidecar(listener: () => void): () => void {
-    this.syncToSidecarListeners.add(listener);
-    return () => this.syncToSidecarListeners.delete(listener);
+    return this.listeners.onSyncToSidecar(listener);
   }
 
-  /** Register a listener invoked after writes to check shouldConsolidate. */
   onConsolidateCheck(listener: () => void): () => void {
-    this.consolidateCheckListeners.add(listener);
-    return () => this.consolidateCheckListeners.delete(listener);
-  }
-
-  private notifyAfterWrite(opts?: { skipConsolidateCheck?: boolean }): void {
-    this.notifySyncToSidecar();
-    if (!opts?.skipConsolidateCheck && !this.consolidating) {
-      this.notifyConsolidateCheck();
-    }
-  }
-
-  private notifySyncToSidecar(): void {
-    for (const listener of this.syncToSidecarListeners) listener();
-  }
-
-  private notifyConsolidateCheck(): void {
-    for (const listener of this.consolidateCheckListeners) listener();
-  }
-
-  /** Ground Truth ingress gate: normalize → redact → skip if empty. */
-  private prepareEntryForWrite(entry: StoreMemoryEntry): StoreMemoryEntry | null {
-    const normalized = this.normalizeEntry(entry);
-    try {
-      const result = redactText(normalized.content);
-      const prepared: StoreMemoryEntry = { ...normalized, content: result.text };
-
-      if (isEmptyAfterRedaction(prepared.content)) {
-        debugMemory("write", "write_skipped", {
-          reason: "redaction_empty",
-          entryId: prepared.id,
-        });
-        return null;
-      }
-
-      if (result.mutated) {
-        debugMemory("write", "write_redacted", {
-          hitCount: result.hitCount,
-          secretHits: result.secretHits,
-          piiHits: result.piiHits,
-          entryId: prepared.id,
-          policyVersion: result.policyVersion,
-        });
-      }
-
-      return prepared;
-    } catch {
-      debugMemory("write", "write_skipped", {
-        reason: "redaction_error",
-        entryId: normalized.id,
-      });
-      return null;
-    }
-  }
-
-  private async tryAppendUnlocked(entry: StoreMemoryEntry): Promise<boolean> {
-    const prepared = this.prepareEntryForWrite(entry);
-    if (!prepared) return false;
-    await this._appendOne(prepared);
-    return true;
-  }
-
-  /** Physical write only; entry must already pass prepareEntryForWrite. */
-  private async _appendOne(entry: StoreMemoryEntry): Promise<void> {
-    const main = await this.backend.readText(this.paths.memoryFile);
-    if (countLines(main) >= this.maxLines) {
-      await this.appendToOverflowUnlocked(entry, main);
-      return;
-    }
-
-    const next = this.insertEntryIntoMarkdown(main, entry);
-    if (countLines(next) > this.maxLines) {
-      await this.appendToOverflowUnlocked(entry, main);
-      return;
-    }
-
-    await this.backend.writeText(this.paths.memoryFile, next);
-  }
-
-  private async appendIfAbsentUnlocked(entry: StoreMemoryEntry): Promise<boolean> {
-    const prepared = this.prepareEntryForWrite(entry);
-    if (!prepared) return false;
-
-    const resolved = await this.readResolvedUnlocked();
-    const exists = resolved.entries.some(
-      (item) => item.section === prepared.section && item.content.trim() === prepared.content.trim(),
-    );
-    if (exists) return false;
-
-    await this._appendOne(prepared);
-    return true;
-  }
-
-  private async appendToOverflowUnlocked(entry: StoreMemoryEntry, main: string): Promise<void> {
-    const autoFiles = await this.backend.listAutoFiles(this.paths.agentDir);
-    let targetName = autoFiles.at(-1);
-    let targetPath = targetName
-      ? this.backend.autoFilePath(this.paths.agentDir, targetName)
-      : this.newAutoFilePath();
-
-    if (!targetName) {
-      targetName = pathBasename(targetPath);
-      await this.backend.writeText(targetPath, `${formatSectionHeader(entry.section)}\n\n`);
-    }
-
-    let overflowContent = await this.backend.readText(targetPath);
-    const line = formatEntryLine(entry);
-    overflowContent = overflowContent.trimEnd() + `\n${line}\n`;
-    await this.backend.writeText(targetPath, overflowContent);
-
-    const pointer = `- (overflow) → ${targetName}`;
-    if (!main.includes(pointer)) {
-      const withPointer = `${main.trimEnd()}\n${pointer}\n`;
-      await this.backend.writeText(this.paths.memoryFile, withPointer);
-    }
-  }
-
-  private insertEntryIntoMarkdown(content: string, entry: StoreMemoryEntry): string {
-    const lines = content.split("\n");
-    const header = formatSectionHeader(entry.section);
-    const headerIdx = lines.findIndex((line) => line.trim() === header);
-    const line = formatEntryLine(entry);
-
-    if (headerIdx === -1) {
-      const trimmed = content.trimEnd();
-      return `${trimmed}\n\n${header}\n\n${line}\n`;
-    }
-
-    let insertAt = headerIdx + 1;
-    while (insertAt < lines.length && lines[insertAt]?.trim() === "") insertAt++;
-
-    while (insertAt < lines.length) {
-      const current = lines[insertAt]!;
-      if (current.startsWith("## ")) break;
-      insertAt++;
-    }
-
-    const next = [...lines.slice(0, insertAt), line, ...lines.slice(insertAt)];
-    return `${next.join("\n").trimEnd()}\n`;
-  }
-
-  private async rewriteEntriesUnlocked(entries: ParsedEntry[]): Promise<void> {
-    const grouped = new Map<string, ParsedEntry[]>();
-    for (const section of MEMORY_SECTIONS) grouped.set(section, []);
-    for (const entry of entries) {
-      grouped.get(entry.section)?.push(entry);
-    }
-
-    const lines: string[] = [];
-    for (const section of MEMORY_SECTIONS) {
-      lines.push(formatSectionHeader(section), "");
-      for (const entry of grouped.get(section) ?? []) {
-        lines.push(
-          formatEntryLine({
-            id: entry.id,
-            section: entry.section,
-            content: entry.content,
-            userAuthored: entry.userAuthored,
-            timestamp: entry.timestamp,
-          }),
-        );
-      }
-      lines.push("");
-    }
-
-    await this.backend.writeText(this.paths.memoryFile, `${lines.join("\n").trimEnd()}\n`);
-    const autoFiles = await this.backend.listAutoFiles(this.paths.agentDir);
-    await Promise.all(
-      autoFiles.map((fileName) =>
-        this.backend.deleteAutoFile(this.backend.autoFilePath(this.paths.agentDir, fileName)),
-      ),
-    );
+    return this.listeners.onConsolidateCheck(listener);
   }
 
   private async readResolvedUnlocked(): Promise<ResolvedMemory> {
-    const main = await this.backend.readText(this.paths.memoryFile);
-    const entries = [...parseMemoryMarkdown(main, this.paths.memoryFile)];
-    for (const fileName of listOverflowPointers(main)) {
-      const path = this.backend.autoFilePath(this.paths.agentDir, fileName);
-      entries.push(...parseMemoryMarkdown(await this.backend.readText(path), path));
-    }
-    return { content: main, entries };
-  }
-
-  private normalizeEntry(entry: StoreMemoryEntry): StoreMemoryEntry {
-    return {
-      ...entry,
-      id: entry.id || this.newEntryId(),
-      timestamp: entry.timestamp || formatTimestamp(),
-    };
+    return collectResolvedEntries(this.collectResolvedOpts());
   }
 
   private newEntryId(): string {

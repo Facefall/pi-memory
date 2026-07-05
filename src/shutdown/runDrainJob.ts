@@ -1,13 +1,6 @@
 import type { LlmClient } from "../adapters/llm/types.js";
-import {
-  filterCompactionDelta,
-  shouldSkipSubagentCompactionIngest,
-} from "../compact/subagentDelta.js";
-import { parseMemoryExport } from "../compact/parseMemoryExport.js";
-import { reindex } from "../sidecar/client.js";
-import { ensureSidecarRunning } from "../sidecar/sidecarManager.js";
-import { resolveSidecarPaths } from "../sidecar/paths.js";
-import { sidecarQueryCache } from "../preflight/queryCache.js";
+import { syncSidecarIndex } from "../sidecar/syncIndex.js";
+import { ingestMemoryExport } from "../store/ingestEntries.js";
 import type { MemoryStore } from "../store/memoryStore.js";
 import { canRead, pathExists } from "../utils/fs.js";
 
@@ -160,43 +153,15 @@ async function ingestFromSummary(opts: {
   compactionId?: string;
   subagent?: boolean;
 }): Promise<number> {
-  const parsed = parseMemoryExport(opts.summary);
-  if (parsed.length === 0) {
-    if (opts.compactionId) {
-      await opts.store.markCompactionProcessed(opts.compactionId);
-    }
-    await markShutdownProcessed(opts.agentDir, opts.sessionFile);
-    return 0;
-  }
-
-  let entries = parsed;
-  if (opts.subagent) {
-    const existing = await opts.store.listEntries();
-    entries = filterCompactionDelta(parsed, existing);
-    if (shouldSkipSubagentCompactionIngest(parsed, entries)) {
-      if (opts.compactionId) {
-        await opts.store.markCompactionProcessed(opts.compactionId);
-      }
-      await markShutdownProcessed(opts.agentDir, opts.sessionFile);
-      return 0;
-    }
-  }
-
-  if (entries.length > 0) {
-    await opts.store.appendMany(entries, { mode: "ifAbsent" });
-  }
+  const { appended } = await ingestMemoryExport({
+    store: opts.store,
+    summary: opts.summary,
+    isSubagent: !!opts.subagent,
+  });
 
   if (opts.compactionId) {
     await opts.store.markCompactionProcessed(opts.compactionId);
   }
   await markShutdownProcessed(opts.agentDir, opts.sessionFile);
-  return entries.length;
-}
-
-async function syncSidecarIndex(agentDir: string, store: MemoryStore): Promise<number> {
-  const sidecar = resolveSidecarPaths(agentDir);
-  await ensureSidecarRunning(sidecar);
-  const result = await reindex(sidecar.socketPath, await store.exportForIndex());
-  sidecarQueryCache.onReindexComplete(agentDir, result.index_generation);
-  return result.index_generation;
+  return appended;
 }
